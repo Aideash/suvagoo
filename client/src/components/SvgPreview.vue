@@ -179,6 +179,12 @@ const aspectRatioStyle = computed(() => {
   }
 })
 
+const handleRadius = computed(() => {
+  const { width, height } = viewBox.value
+  if (width <= 0 || height <= 0) return 5
+  return Math.min(width, height) / 20
+})
+
 const fullscreen = ref(false)
 const svgPreviewRef = ref<HTMLElement | null>(null)
 
@@ -267,7 +273,7 @@ function toggleFullscreen() {
                 }"
                 :cx="point.x"
                 :cy="point.y"
-                r="5"
+                :r="handleRadius"
                 @pointerdown="onHandlePointerDown(index, $event)"
                 @click="onHandleClick(index, $event)"
               />
@@ -442,7 +448,7 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
     }
 
     &--editing-points {
-      cursor: default;
+      cursor: crosshair;
     }
   }
 

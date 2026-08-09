@@ -623,7 +623,12 @@ export function insertChildElement(
   if (!context) return null
 
   const schema = getElementSchema(context.tagName)
-  if (schema && schema.children.length && !schema.children.includes(normalizeTagName(childTag))) {
+  const normalizedChild = normalizeTagName(childTag)
+  if (
+    schema &&
+    schema.children.length &&
+    !schema.children.some((tag) => normalizeTagName(tag) === normalizedChild)
+  ) {
     return null
   }
 

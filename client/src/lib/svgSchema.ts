@@ -291,7 +291,13 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
 ]
 
-const schemaByTag = new Map(SVG_ELEMENTS.map((entry) => [entry.tag, entry]))
+export function normalizeTagName(raw: string): string {
+  const trimmed = raw.trim().toLowerCase()
+  const colon = trimmed.indexOf(':')
+  return colon >= 0 ? trimmed.slice(colon + 1) : trimmed
+}
+
+const schemaByTag = new Map(SVG_ELEMENTS.map((entry) => [normalizeTagName(entry.tag), entry]))
 
 const VIEWBOX_NUMERIC_ATTRS = new Set([
   'x',
@@ -325,12 +331,6 @@ const DEFAULT_ATTR_VALUES: Record<string, string> = {
   'stop-color': '#3b82f6',
   'font-size': '16',
   'text-anchor': 'middle',
-}
-
-export function normalizeTagName(raw: string): string {
-  const trimmed = raw.trim().toLowerCase()
-  const colon = trimmed.indexOf(':')
-  return colon >= 0 ? trimmed.slice(colon + 1) : trimmed
 }
 
 export function getElementSchema(tagName: string): SvgElementSchema | null {
