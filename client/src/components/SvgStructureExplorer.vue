@@ -7,15 +7,19 @@ import {
   uniqueSorted,
 } from "../lib/svgSchema";
 import {
+  findAttributeAtOffset,
   findElementAtOffset,
   findNodeByPath,
   formatElementPath,
   isXmlParsable,
   parseIndexedDocument,
   pathsEqual,
+  attributeIdentity,
+  type AttributeContext,
   type IndexedDocumentNode,
   type PathSegment,
 } from "../lib/svgDocument";
+import SvgAttributeAdjuster from "./SvgAttributeAdjuster.vue";
 
 const props = defineProps<{
   content: string;
@@ -28,18 +32,67 @@ const emit = defineEmits<{
   selectElement: [path: PathSegment[]];
   deleteChild: [path: PathSegment[]];
   deleteAttribute: [name: string];
+  updateAttribute: [path: PathSegment[], name: string, value: string];
 }>();
 
 const filter = ref("");
 const deleteMode = ref(false);
 const showAllAttributes = ref(false);
 const showAllChildren = ref(false);
+const pinnedAttribute = ref<AttributeContext | null>(null);
 
 const needle = computed(() => filter.value.trim().toLowerCase());
 const parsable = computed(() => isXmlParsable(props.content));
 const indexedDocument = computed(() => parseIndexedDocument(props.content));
 const context = computed(() =>
   findElementAtOffset(props.content, props.cursorOffset),
+);
+const attributeAtCursor = computed(() =>
+  findAttributeAtOffset(props.content, props.cursorOffset),
+);
+const activeAttribute = computed(() => {
+  if (attributeAtCursor.value) return attributeAtCursor.value;
+  if (
+    pinnedAttribute.value &&
+    context.value &&
+    pathsEqual(pinnedAttribute.value.path, context.value.path)
+  ) {
+    const current = context.value.existingAttributes[pinnedAttribute.value.attrName];
+    if (current !== undefined) {
+      return { ...pinnedAttribute.value, value: current };
+    }
+  }
+  return null;
+});
+
+watch(attributeAtCursor, (next) => {
+  if (!next) return;
+  if (
+    pinnedAttribute.value &&
+    attributeIdentity(pinnedAttribute.value) === attributeIdentity(next)
+  ) {
+    pinnedAttribute.value = {
+      ...pinnedAttribute.value,
+      value: next.value,
+      valueStart: next.valueStart,
+      valueEnd: next.valueEnd,
+    };
+    return;
+  }
+  pinnedAttribute.value = next;
+});
+
+watch(
+  () => props.content,
+  () => {
+    if (!pinnedAttribute.value || !context.value) return;
+    const current = context.value.existingAttributes[pinnedAttribute.value.attrName];
+    if (current === undefined) {
+      pinnedAttribute.value = null;
+      return;
+    }
+    pinnedAttribute.value = { ...pinnedAttribute.value, value: current };
+  },
 );
 const schema = computed(() =>
   context.value ? getElementSchema(context.value.tagName) : null,
@@ -181,7 +234,36 @@ const flatTree = computed(() => {
 });
 
 function onTreeClick(path: PathSegment[]) {
+  pinnedAttribute.value = null;
   emit("selectElement", path);
+}
+
+function onAttributeChipClick(name: string) {
+  if (context.value && context.value.existingAttributes[name] !== undefined) {
+    pinnedAttribute.value = {
+      path: context.value.path,
+      tagName: context.value.tagName,
+      attrName: name,
+      value: context.value.existingAttributes[name],
+      valueStart: 0,
+      valueEnd: 0,
+      quoted: true,
+      quoteChar: '"',
+    };
+  } else {
+    pinnedAttribute.value = null;
+  }
+  emit("insertAttribute", name);
+}
+
+function onAttributeUpdate(value: string) {
+  if (!activeAttribute.value) return;
+  emit(
+    "updateAttribute",
+    activeAttribute.value.path,
+    activeAttribute.value.attrName,
+    value,
+  );
 }
 </script>
 
@@ -359,13 +441,16 @@ function onTreeClick(path: PathSegment[]) {
               :key="name"
               type="button"
               class="svg-explorer__chip"
-              :class="{ present: existingAttributeNames.has(name) }"
+              :class="{
+                present: existingAttributeNames.has(name),
+                selected: activeAttribute?.attrName === name,
+              }"
               :title="
                 existingAttributeNames.has(name)
-                  ? `Jump to ${name}`
+                  ? `Adjust ${name}`
                   : `Insert ${name}`
               "
-              @click="emit('insertAttribute', name)"
+              @click="onAttributeChipClick(name)"
             >
               {{ name }}
             </button>
@@ -380,6 +465,15 @@ function onTreeClick(path: PathSegment[]) {
           </button>
         </section>
       </template>
+
+      <SvgAttributeAdjuster
+        v-if="activeAttribute"
+        :key="attributeIdentity(activeAttribute)"
+        :attribute="activeAttribute"
+        :content="content"
+        class="svg-explorer__section"
+        @update="onAttributeUpdate"
+      />
     </div>
   </div>
 </template>
@@ -617,6 +711,11 @@ function onTreeClick(path: PathSegment[]) {
     &.present {
       border-color: color-mix(in srgb, var(--accent) 45%, transparent);
       color: $color-accent;
+    }
+
+    &.selected {
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      border-color: $color-accent;
     }
 
     &--danger {

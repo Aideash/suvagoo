@@ -18,6 +18,7 @@ import {
   findElementAtOffset,
   insertAttribute,
   insertChildElement,
+  updateAttribute,
   type PathSegment,
 } from "../lib/svgDocument";
 
@@ -158,6 +159,16 @@ function onDeleteAttribute(name: string) {
   }
   editorRef.value?.applyChange(result.content, result.cursor);
 }
+
+function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
+  builderError.value = "";
+  const result = updateAttribute(content.value, path, name, value);
+  if (!result) {
+    builderError.value = `Could not update attribute ${name}.`;
+    return;
+  }
+  editorRef.value?.applyChange(result.content, result.cursor);
+}
 </script>
 
 <template>
@@ -227,6 +238,7 @@ function onDeleteAttribute(name: string) {
           @select-element="onSelectElement"
           @delete-child="onDeleteChild"
           @delete-attribute="onDeleteAttribute"
+          @update-attribute="onUpdateAttribute"
         />
       </aside>
 

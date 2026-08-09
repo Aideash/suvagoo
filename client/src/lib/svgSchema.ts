@@ -93,7 +93,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     commonAttributes: ["transform", "fill", "stroke", "opacity", "clip-path"],
     attributes: [...GLOBAL_ATTRIBUTES],
     children: [...GRAPHICAL_CHILDREN],
-    snippet: '<circle cx="50" cy="50" r="25" fill="#3b82f6"/>',
+    snippet: "<g></g>",
   },
   {
     tag: "rect",

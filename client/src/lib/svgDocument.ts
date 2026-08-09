@@ -41,6 +41,17 @@ export interface EditResult {
   cursor: number;
 }
 
+export interface AttributeContext {
+  path: PathSegment[];
+  tagName: string;
+  attrName: string;
+  value: string;
+  valueStart: number;
+  valueEnd: number;
+  quoted: boolean;
+  quoteChar: '"' | "'" | null;
+}
+
 interface OpenFrame {
   tagName: string;
   tagIndex: number;
@@ -445,24 +456,132 @@ function findMatchingCloseTag(
   return null;
 }
 
+interface AttributeRange {
+  name: string;
+  value: string;
+  nameStart: number;
+  nameEnd: number;
+  valueStart: number;
+  valueEnd: number;
+  quoted: boolean;
+  quoteChar: '"' | "'" | null;
+}
+
+function parseAttributeRanges(
+  openTagSource: string,
+  openTagStart: number,
+): AttributeRange[] {
+  const ranges: AttributeRange[] = [];
+  const pattern =
+    /([:@A-Za-z_][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(openTagSource))) {
+    const name = match[1];
+    if (name === "/" || name.startsWith("?")) continue;
+    const rawValue = match[2];
+    const value = match[3] ?? match[4] ?? match[5] ?? "";
+    const nameStart = openTagStart + match.index;
+    const nameEnd = nameStart + name.length;
+    const valueTokenStart = openTagStart + match.index + match[0].indexOf(rawValue);
+    const quoted = rawValue.startsWith('"') || rawValue.startsWith("'");
+    const quoteChar = quoted ? (rawValue[0] as '"' | "'") : null;
+    const valueStart = quoted ? valueTokenStart + 1 : valueTokenStart;
+    const valueEnd = quoted ? valueTokenStart + rawValue.length - 1 : valueTokenStart + rawValue.length;
+    ranges.push({
+      name,
+      value,
+      nameStart,
+      nameEnd,
+      valueStart,
+      valueEnd,
+      quoted,
+      quoteChar,
+    });
+  }
+  return ranges;
+}
+
 function attributeValueCursor(
   openTagSource: string,
   attrName: string,
   openTagStart: number,
 ): number | null {
-  const pattern =
-    /([:@A-Za-z_][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(openTagSource))) {
-    if (match[1] !== attrName) continue;
-    const quoted = match[2];
-    const valueStartInTag = match.index + match[0].indexOf(quoted);
-    if (quoted.startsWith('"') || quoted.startsWith("'")) {
-      return openTagStart + valueStartInTag + 1;
-    }
-    return openTagStart + valueStartInTag;
+  for (const range of parseAttributeRanges(openTagSource, openTagStart)) {
+    if (range.name !== attrName) continue;
+    return range.valueStart;
   }
   return null;
+}
+
+export function findAttributeAtOffset(
+  content: string,
+  offset: number,
+): AttributeContext | null {
+  const element = findElementAtOffset(content, offset);
+  if (!element) return null;
+
+  const openTag = content.slice(element.openTagStart, element.openTagEnd);
+  for (const range of parseAttributeRanges(openTag, element.openTagStart)) {
+    const inName = offset >= range.nameStart && offset <= range.nameEnd;
+    const inValue = offset >= range.valueStart && offset <= range.valueEnd;
+    if (!inName && !inValue) continue;
+    return {
+      path: element.path,
+      tagName: element.tagName,
+      attrName: range.name,
+      value: range.value,
+      valueStart: range.valueStart,
+      valueEnd: range.valueEnd,
+      quoted: range.quoted,
+      quoteChar: range.quoteChar,
+    };
+  }
+
+  return null;
+}
+
+function replaceAttributeValue(
+  openTag: string,
+  attrName: string,
+  newValue: string,
+): string | null {
+  const escaped = attrName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `(\\b${escaped}\\s*=\\s*)("([^"]*)"|'([^']*)'|([^\\s"'=<>\`]+))`,
+    "i",
+  );
+  if (!pattern.test(openTag)) return null;
+  return openTag.replace(pattern, (_match, prefix, rawValue) => {
+    if (rawValue.startsWith('"')) return `${prefix}"${newValue}"`;
+    if (rawValue.startsWith("'")) return `${prefix}'${newValue}'`;
+    return `${prefix}${newValue}`;
+  });
+}
+
+export function updateAttribute(
+  content: string,
+  path: PathSegment[],
+  attrName: string,
+  newValue: string,
+): EditResult | null {
+  const context = findElementByPath(content, path);
+  if (!context) return null;
+  if (context.existingAttributes[attrName] === undefined) return null;
+
+  const openTag = content.slice(context.openTagStart, context.openTagEnd);
+  const updated = replaceAttributeValue(openTag, attrName, newValue);
+  if (!updated) return null;
+
+  const next =
+    content.slice(0, context.openTagStart) +
+    updated +
+    content.slice(context.openTagEnd);
+
+  const cursor =
+    attributeValueCursor(updated, attrName, context.openTagStart) ??
+    Math.min(context.openTagStart + updated.length, next.length);
+
+  return { content: next, cursor };
 }
 
 function removeAttributeFromOpenTag(
@@ -622,6 +741,13 @@ export function deleteChildElement(
 export function formatElementPath(path: PathSegment[]): string {
   if (!path.length) return "(none)";
   return path.map(formatPathSegment).join(" › ");
+}
+
+export function attributeIdentity(
+  attr: Pick<AttributeContext, "attrName" | "path">,
+): string {
+  const pathKey = attr.path.map((segment) => `${segment.tag}:${segment.index}`).join("/");
+  return `${attr.attrName}@${pathKey}`;
 }
 
 export function getViewBox(content: string): ViewBox {
