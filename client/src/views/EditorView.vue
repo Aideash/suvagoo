@@ -1,0 +1,354 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import {
+  STARTER_SVG,
+  createSvg,
+  getSvg,
+  updateSvg,
+} from "../api/svgs";
+import SvgEditor from "../components/SvgEditor.vue";
+import SvgPreview from "../components/SvgPreview.vue";
+import SvgStructureExplorer from "../components/SvgStructureExplorer.vue";
+import ThemePicker from "../components/ThemePicker.vue";
+import {
+  cursorOffsetForPath,
+  deleteAttribute,
+  deleteChildElement,
+  findElementAtOffset,
+  insertAttribute,
+  insertChildElement,
+  type PathSegment,
+} from "../lib/svgDocument";
+
+const route = useRoute();
+const router = useRouter();
+
+const isEditing = computed(() => Boolean(route.params.id));
+const name = ref("Untitled SVG");
+const content = ref(STARTER_SVG);
+const cursorOffset = ref(0);
+const builderError = ref("");
+const loading = ref(false);
+const saving = ref(false);
+const error = ref("");
+
+const editorRef = ref<InstanceType<typeof SvgEditor> | null>(null);
+const explorerOpen = ref(true);
+
+onMounted(async () => {
+  if (!isEditing.value) return;
+
+  loading.value = true;
+  error.value = "";
+  try {
+    const svg = await getSvg(route.params.id as string);
+    name.value = svg.name;
+    content.value = svg.content;
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Failed to load SVG";
+  } finally {
+    loading.value = false;
+  }
+});
+
+async function save() {
+  saving.value = true;
+  error.value = "";
+  try {
+    if (isEditing.value) {
+      await updateSvg(route.params.id as string, {
+        name: name.value,
+        content: content.value,
+      });
+      router.push({ name: "view", params: { id: route.params.id } });
+    } else {
+      const created = await createSvg({
+        name: name.value,
+        content: content.value,
+      });
+      router.push({ name: "view", params: { id: created.id } });
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Failed to save SVG";
+  } finally {
+    saving.value = false;
+  }
+}
+
+function cancel() {
+  if (isEditing.value) {
+    router.push({ name: "view", params: { id: route.params.id } });
+  } else {
+    router.push({ name: "list" });
+  }
+}
+
+function onInsertChild(tagName: string) {
+  builderError.value = "";
+  const result = insertChildElement(content.value, cursorOffset.value, tagName);
+  if (!result) {
+    builderError.value = `Could not insert <${tagName}> at the cursor.`;
+    return;
+  }
+  editorRef.value?.applyChange(result.content, result.cursor);
+}
+
+function onInsertAttribute(name: string) {
+  builderError.value = "";
+  const result = insertAttribute(content.value, cursorOffset.value, name);
+  if (!result) {
+    builderError.value = `Could not insert attribute ${name} at the cursor.`;
+    return;
+  }
+  editorRef.value?.applyChange(result.content, result.cursor);
+}
+
+function onSelectElement(path: PathSegment[]) {
+  builderError.value = "";
+  const offset = cursorOffsetForPath(content.value, path);
+  if (offset == null) {
+    builderError.value = "Could not locate that element in the source.";
+    return;
+  }
+  editorRef.value?.setCursor(offset);
+}
+
+function onDeleteChild(path: PathSegment[]) {
+  builderError.value = "";
+  const result = deleteChildElement(content.value, path);
+  if (!result) {
+    builderError.value = "Could not delete that element.";
+    return;
+  }
+  editorRef.value?.applyChange(result.content, result.cursor);
+}
+
+function onDeleteAttribute(name: string) {
+  builderError.value = "";
+  const path = findElementAtOffset(content.value, cursorOffset.value)?.path;
+  if (!path) {
+    builderError.value = `Could not delete attribute ${name}.`;
+    return;
+  }
+  const result = deleteAttribute(content.value, path, name);
+  if (!result) {
+    builderError.value = `Could not delete attribute ${name}.`;
+    return;
+  }
+  editorRef.value?.applyChange(result.content, result.cursor);
+}
+</script>
+
+<template>
+  <div class="editor-view">
+    <header class="page-header">
+      <div class="editor-view__header-left">
+        <button type="button" class="btn btn--secondary" @click="cancel">
+          ← Back
+        </button>
+        <input
+          v-model="name"
+          type="text"
+          class="input editor-view__name"
+          placeholder="SVG name"
+        />
+      </div>
+      <div class="page-header__actions">
+        <button
+          type="button"
+          class="btn btn--primary"
+          :disabled="saving || loading"
+          @click="save"
+        >
+          {{ saving ? "Saving…" : "Save" }}
+        </button>
+        <ThemePicker />
+      </div>
+    </header>
+
+    <p v-if="error" class="error-banner editor-view__error">{{ error }}</p>
+    <p v-if="builderError" class="error-banner editor-view__error">{{ builderError }}</p>
+    <p v-if="loading" class="editor-view__loading">Loading…</p>
+
+    <div v-else class="editor-view__workspace">
+      <aside
+        class="editor-view__explorer"
+        :class="{ 'editor-view__explorer--collapsed': !explorerOpen }"
+      >
+        <div class="editor-view__explorer-header">
+          <h2 v-if="explorerOpen" class="editor-view__label">Structure</h2>
+          <button
+            type="button"
+            class="editor-view__explorer-toggle"
+            :title="explorerOpen ? 'Collapse structure panel' : 'Expand structure panel'"
+            @click="explorerOpen = !explorerOpen"
+          >
+            <span class="material-icons sm">
+              {{ explorerOpen ? "chevron_left" : "account_tree" }}
+            </span>
+          </button>
+        </div>
+        <SvgStructureExplorer
+          v-show="explorerOpen"
+          :content="content"
+          :cursor-offset="cursorOffset"
+          @insert-child="onInsertChild"
+          @insert-attribute="onInsertAttribute"
+          @select-element="onSelectElement"
+          @delete-child="onDeleteChild"
+          @delete-attribute="onDeleteAttribute"
+        />
+      </aside>
+
+      <div class="editor-view__main">
+        <section class="editor-view__pane">
+          <h2 class="editor-view__label">Code</h2>
+          <SvgEditor
+            ref="editorRef"
+            v-model="content"
+            @cursor-change="cursorOffset = $event"
+          />
+        </section>
+        <section class="editor-view__pane">
+          <h2 class="editor-view__label">Preview</h2>
+          <SvgPreview :content="content" />
+        </section>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped lang="scss">
+@use "../styles/variables" as *;
+
+.editor-view {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+
+  &__header-left {
+    display: flex;
+    align-items: center;
+    gap: $spacing-md;
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__name {
+    flex: 1;
+    max-width: 320px;
+  }
+
+  &__error {
+    margin: $spacing-md $spacing-xl 0;
+  }
+
+  &__loading {
+    padding: $spacing-xl;
+    color: $color-text-muted;
+    text-align: center;
+  }
+
+  &__workspace {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: $spacing-md;
+    overflow-x: auto;
+  }
+
+  &__explorer {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-sm;
+    width: min(320px, 34vw);
+    min-width: 220px;
+    flex-shrink: 0;
+    min-height: 0;
+    transition: width 0.2s ease, min-width 0.2s ease;
+
+    &--collapsed {
+      width: 40px;
+      min-width: 40px;
+      align-items: center;
+    }
+  }
+
+  &__explorer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $spacing-xs;
+    flex-shrink: 0;
+
+    .editor-view__explorer--collapsed & {
+      justify-content: center;
+    }
+  }
+
+  &__explorer-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid $color-border;
+    border-radius: $radius-sm;
+    background: $color-surface;
+    color: $color-text-muted;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+
+    &:hover {
+      background: $color-surface-hover;
+      color: $color-text;
+      border-color: var(--border-strong);
+    }
+  }
+
+  &__main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: $spacing-md $spacing-xl $spacing-xl;
+    gap: $spacing-md;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+
+    @media (max-width: 960px) {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr 1fr;
+    }
+  }
+
+  &__pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: $spacing-sm;
+  }
+
+  &__label {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: $color-text-muted;
+  }
+
+  &__explorer :deep(.svg-explorer) {
+    flex: 1;
+    min-height: 200px;
+  }
+
+  &__pane :deep(.svg-editor),
+  &__pane :deep(.svg-preview) {
+    flex: 1;
+    min-height: 200px;
+  }
+}
+</style>

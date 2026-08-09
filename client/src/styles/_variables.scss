@@ -1,0 +1,26 @@
+// Layout tokens — not theme-dependent.
+$radius-sm: 6px;
+$radius-md: 10px;
+$radius-lg: 14px;
+
+$spacing-xs: 0.25rem;
+$spacing-sm: 0.5rem;
+$spacing-md: 1rem;
+$spacing-lg: 1.5rem;
+$spacing-xl: 2rem;
+
+$header-height: 56px;
+
+// Colour aliases — resolved from CSS custom properties set by the theme manager.
+$color-bg: var(--bg);
+$color-surface: var(--bg-raised);
+$color-surface-hover: var(--bg-hover);
+$color-border: var(--border);
+$color-text: var(--text);
+$color-text-muted: var(--text-dim);
+$color-accent: var(--accent);
+$color-accent-hover: var(--accent-hover);
+$color-danger: var(--red);
+$color-danger-hover: var(--red);
+$font-sans: var(--font-family);
+$font-mono: var(--mono);
