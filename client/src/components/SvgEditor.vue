@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { Compartment } from "@codemirror/state";
 import { EditorView, basicSetup } from "codemirror";
 import { xml } from "@codemirror/lang-xml";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -15,6 +16,8 @@ const emit = defineEmits<{
 }>();
 
 const container = ref<HTMLElement | null>(null);
+const lineWrap = ref(false);
+const wrapCompartment = new Compartment();
 let view: EditorView | null = null;
 let applyingExternal = false;
 
@@ -44,6 +47,16 @@ const highlighting = HighlightStyle.define([
   { tag: tags.invalid, color: "var(--red)" },
 ]);
 
+function toggleLineWrap() {
+  if (!view) return;
+  lineWrap.value = !lineWrap.value;
+  view.dispatch({
+    effects: wrapCompartment.reconfigure(
+      lineWrap.value ? EditorView.lineWrapping : [],
+    ),
+  });
+}
+
 function emitCursor() {
   if (!view) return;
   emit("cursorChange", view.state.selection.main.head);
@@ -60,6 +73,7 @@ onMounted(() => {
       xml(),
       editorTheme,
       syntaxHighlighting(highlighting),
+      wrapCompartment.of([]),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !applyingExternal) {
           emit("update:modelValue", update.state.doc.toString());
@@ -121,23 +135,84 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="container" class="svg-editor" />
+  <div class="svg-editor">
+    <div class="svg-editor__toolbar">
+      <button
+        type="button"
+        class="svg-editor__wrap-toggle"
+        :class="{ active: lineWrap }"
+        :title="lineWrap ? 'Disable line wrap' : 'Enable line wrap'"
+        @click="toggleLineWrap"
+      >
+        <span class="material-icons sm">wrap_text</span>
+        <span class="svg-editor__wrap-label">{{ lineWrap ? "Wrap on" : "Wrap off" }}</span>
+      </button>
+    </div>
+    <div ref="container" class="svg-editor__content" />
+  </div>
 </template>
 
 <style scoped lang="scss">
 @use "../styles/variables" as *;
 
 .svg-editor {
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
   border-radius: $radius-md;
   border: 1px solid $color-border;
+  background: $color-surface;
 
-  :deep(.cm-editor) {
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    padding: $spacing-xs $spacing-sm;
+    border-bottom: 1px solid $color-border;
+  }
+
+  &__wrap-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: $spacing-xs;
+    padding: 2px $spacing-sm;
+    border: 1px solid transparent;
+    border-radius: $radius-sm;
+    background: transparent;
+    color: $color-text-muted;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+
+    &:hover {
+      background: $color-surface-hover;
+      color: $color-text;
+    }
+
+    &.active {
+      color: $color-accent;
+      border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+      background: color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+  }
+
+  &__wrap-label {
+    font-weight: 500;
+  }
+
+  &__content {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  &__content :deep(.cm-editor) {
     height: 100%;
   }
 
-  :deep(.cm-scroller) {
+  &__content :deep(.cm-scroller) {
     overflow: auto;
   }
 }

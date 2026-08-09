@@ -392,9 +392,6 @@ function onTreeClick(path: PathSegment[]) {
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  border: 1px solid $color-border;
-  border-radius: $radius-md;
-  background: $color-surface;
   overflow: hidden;
 
   &--delete {

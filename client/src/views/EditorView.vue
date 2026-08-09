@@ -52,23 +52,43 @@ onMounted(async () => {
   }
 });
 
+async function persistSvg(): Promise<string> {
+  if (isEditing.value) {
+    await updateSvg(route.params.id as string, {
+      name: name.value,
+      content: content.value,
+    });
+    return route.params.id as string;
+  }
+
+  const created = await createSvg({
+    name: name.value,
+    content: content.value,
+  });
+  return created.id;
+}
+
 async function save() {
   saving.value = true;
   error.value = "";
   try {
-    if (isEditing.value) {
-      await updateSvg(route.params.id as string, {
-        name: name.value,
-        content: content.value,
-      });
-      router.push({ name: "view", params: { id: route.params.id } });
-    } else {
-      const created = await createSvg({
-        name: name.value,
-        content: content.value,
-      });
-      router.push({ name: "view", params: { id: created.id } });
+    const id = await persistSvg();
+    if (!isEditing.value) {
+      await router.replace({ name: "edit", params: { id } });
     }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Failed to save SVG";
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function saveAndExit() {
+  saving.value = true;
+  error.value = "";
+  try {
+    const id = await persistSvg();
+    router.push({ name: "view", params: { id } });
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Failed to save SVG";
   } finally {
@@ -157,12 +177,21 @@ function onDeleteAttribute(name: string) {
       <div class="page-header__actions">
         <button
           type="button"
-          class="btn btn--primary"
+          class="btn btn--secondary"
           :disabled="saving || loading"
           @click="save"
         >
           {{ saving ? "Saving…" : "Save" }}
         </button>
+        <button
+          type="button"
+          class="btn btn--primary"
+          :disabled="saving || loading"
+          @click="saveAndExit"
+        >
+          {{ saving ? "Saving…" : "Save & exit" }}
+        </button>
+        <span class="separator" style="width: 5px"></span>
         <ThemePicker />
       </div>
     </header>
@@ -202,7 +231,7 @@ function onDeleteAttribute(name: string) {
       </aside>
 
       <div class="editor-view__main">
-        <section class="editor-view__pane">
+        <section class="editor-view__pane editor-view__pane--code">
           <h2 class="editor-view__label">Code</h2>
           <SvgEditor
             ref="editorRef"
@@ -210,7 +239,7 @@ function onDeleteAttribute(name: string) {
             @cursor-change="cursorOffset = $event"
           />
         </section>
-        <section class="editor-view__pane">
+        <section class="editor-view__pane editor-view__pane--preview">
           <h2 class="editor-view__label">Preview</h2>
           <SvgPreview :content="content" />
         </section>
@@ -254,8 +283,8 @@ function onDeleteAttribute(name: string) {
     display: flex;
     flex: 1;
     min-height: 0;
-    gap: $spacing-md;
-    overflow-x: auto;
+    gap: 0;
+    overflow: hidden;
   }
 
   &__explorer {
@@ -267,6 +296,10 @@ function onDeleteAttribute(name: string) {
     flex-shrink: 0;
     min-height: 0;
     transition: width 0.2s ease, min-width 0.2s ease;
+    padding: $spacing-md $spacing-sm;
+    border-right: 1px solid var(--border);
+    background: var(--bg-raised);
+    box-shadow: 0 0 20px 0 rgba(0, 0, 0, 0.4);
 
     &--collapsed {
       width: 40px;
@@ -295,7 +328,9 @@ function onDeleteAttribute(name: string) {
     width: 28px;
     height: 28px;
     padding: 0;
-    border: 1px solid $color-border;
+    border-width: 1px;
+    border-style: solid;
+    border-color: transparent;
     border-radius: $radius-sm;
     background: $color-surface;
     color: $color-text-muted;
@@ -307,21 +342,21 @@ function onDeleteAttribute(name: string) {
       color: $color-text;
       border-color: var(--border-strong);
     }
+
+    .editor-view__explorer--collapsed & {
+      border-color: var(--border);
+    }
   }
 
   &__main {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    padding: $spacing-md $spacing-xl $spacing-xl;
-    gap: $spacing-md;
+    display: flex;
+    flex-direction: column;
     flex: 1;
     min-width: 0;
     min-height: 0;
-
-    @media (max-width: 960px) {
-      grid-template-columns: 1fr;
-      grid-template-rows: 1fr 1fr;
-    }
+    gap: $spacing-md;
+    padding: $spacing-md $spacing-xl $spacing-xl;
+    overflow: hidden;
   }
 
   &__pane {
@@ -329,6 +364,18 @@ function onDeleteAttribute(name: string) {
     flex-direction: column;
     min-height: 0;
     gap: $spacing-sm;
+
+    &--code {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    &--preview {
+      flex: 0 0 min(240px, 32vh);
+      min-height: 120px;
+      overflow: hidden;
+    }
   }
 
   &__label {
@@ -342,13 +389,17 @@ function onDeleteAttribute(name: string) {
 
   &__explorer :deep(.svg-explorer) {
     flex: 1;
-    min-height: 200px;
+    min-height: 0;
   }
 
-  &__pane :deep(.svg-editor),
-  &__pane :deep(.svg-preview) {
+  &__pane--code :deep(.svg-editor) {
     flex: 1;
-    min-height: 200px;
+    min-height: 0;
+  }
+
+  &__pane--preview :deep(.svg-preview) {
+    flex: 1;
+    min-height: 0;
   }
 }
 </style>
