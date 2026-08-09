@@ -4,3 +4,6 @@ server/data/svgs/*.svg
 server/data/index.json
 *.log
 .DS_Store
+
+.env
+*.local

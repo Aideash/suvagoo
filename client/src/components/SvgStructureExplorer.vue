@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   EXPLORER_COMMON_LIMIT,
   formatPathSegment,
   getElementSchema,
   uniqueSorted,
-} from "../lib/svgSchema";
+} from '../lib/svgSchema'
 import {
   findAttributeAtOffset,
   findElementAtOffset,
@@ -18,55 +18,58 @@ import {
   type AttributeContext,
   type IndexedDocumentNode,
   type PathSegment,
-} from "../lib/svgDocument";
-import SvgAttributeAdjuster from "./SvgAttributeAdjuster.vue";
+} from '../lib/svgDocument'
+import SvgAttributeAdjuster from './SvgAttributeAdjuster.vue'
 
 const props = defineProps<{
-  content: string;
-  cursorOffset: number;
-}>();
+  content: string
+  cursorOffset: number
+}>()
 
 const emit = defineEmits<{
-  insertChild: [tagName: string];
-  insertAttribute: [name: string];
-  selectElement: [path: PathSegment[]];
-  deleteChild: [path: PathSegment[]];
-  deleteAttribute: [name: string];
-  updateAttribute: [path: PathSegment[], name: string, value: string];
-}>();
+  insertChild: [tagName: string]
+  insertAttribute: [name: string]
+  selectElement: [path: PathSegment[]]
+  deleteChild: [path: PathSegment[]]
+  deleteAttribute: [name: string]
+  updateAttribute: [path: PathSegment[], name: string, value: string]
+  previewStateChange: [
+    state: {
+      attribute: AttributeContext | null
+      selectedPointIndex: number | null
+    },
+  ]
+}>()
 
-const filter = ref("");
-const deleteMode = ref(false);
-const showAllAttributes = ref(false);
-const showAllChildren = ref(false);
-const pinnedAttribute = ref<AttributeContext | null>(null);
+const filter = ref('')
+const deleteMode = ref(false)
+const showAllAttributes = ref(false)
+const showAllChildren = ref(false)
+const pinnedAttribute = ref<AttributeContext | null>(null)
+const selectedPointIndex = ref<number | null>(null)
 
-const needle = computed(() => filter.value.trim().toLowerCase());
-const parsable = computed(() => isXmlParsable(props.content));
-const indexedDocument = computed(() => parseIndexedDocument(props.content));
-const context = computed(() =>
-  findElementAtOffset(props.content, props.cursorOffset),
-);
-const attributeAtCursor = computed(() =>
-  findAttributeAtOffset(props.content, props.cursorOffset),
-);
+const needle = computed(() => filter.value.trim().toLowerCase())
+const parsable = computed(() => isXmlParsable(props.content))
+const indexedDocument = computed(() => parseIndexedDocument(props.content))
+const context = computed(() => findElementAtOffset(props.content, props.cursorOffset))
+const attributeAtCursor = computed(() => findAttributeAtOffset(props.content, props.cursorOffset))
 const activeAttribute = computed(() => {
-  if (attributeAtCursor.value) return attributeAtCursor.value;
+  if (attributeAtCursor.value) return attributeAtCursor.value
   if (
     pinnedAttribute.value &&
     context.value &&
     pathsEqual(pinnedAttribute.value.path, context.value.path)
   ) {
-    const current = context.value.existingAttributes[pinnedAttribute.value.attrName];
+    const current = context.value.existingAttributes[pinnedAttribute.value.attrName]
     if (current !== undefined) {
-      return { ...pinnedAttribute.value, value: current };
+      return { ...pinnedAttribute.value, value: current }
     }
   }
-  return null;
-});
+  return null
+})
 
 watch(attributeAtCursor, (next) => {
-  if (!next) return;
+  if (!next) return
   if (
     pinnedAttribute.value &&
     attributeIdentity(pinnedAttribute.value) === attributeIdentity(next)
@@ -76,166 +79,155 @@ watch(attributeAtCursor, (next) => {
       value: next.value,
       valueStart: next.valueStart,
       valueEnd: next.valueEnd,
-    };
-    return;
+    }
+    return
   }
-  pinnedAttribute.value = next;
-});
+  pinnedAttribute.value = next
+})
 
 watch(
   () => props.content,
   () => {
-    if (!pinnedAttribute.value || !context.value) return;
-    const current = context.value.existingAttributes[pinnedAttribute.value.attrName];
+    if (!pinnedAttribute.value || !context.value) return
+    const current = context.value.existingAttributes[pinnedAttribute.value.attrName]
     if (current === undefined) {
-      pinnedAttribute.value = null;
-      return;
+      pinnedAttribute.value = null
+      return
     }
-    pinnedAttribute.value = { ...pinnedAttribute.value, value: current };
+    pinnedAttribute.value = { ...pinnedAttribute.value, value: current }
   },
-);
-const schema = computed(() =>
-  context.value ? getElementSchema(context.value.tagName) : null,
-);
+)
+const schema = computed(() => (context.value ? getElementSchema(context.value.tagName) : null))
 const selectedNode = computed(() => {
-  if (!indexedDocument.value || !context.value) return null;
-  return findNodeByPath(indexedDocument.value, context.value.path);
-});
+  if (!indexedDocument.value || !context.value) return null
+  return findNodeByPath(indexedDocument.value, context.value.path)
+})
 
 watch(deleteMode, (enabled) => {
   if (enabled) {
-    showAllAttributes.value = true;
-    showAllChildren.value = true;
+    showAllAttributes.value = true
+    showAllChildren.value = true
   }
-});
+})
 
 function toggleDeleteMode() {
-  deleteMode.value = !deleteMode.value;
+  deleteMode.value = !deleteMode.value
 }
 
 function onModeKeydown(event: KeyboardEvent) {
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
-    toggleDeleteMode();
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    toggleDeleteMode()
   }
 }
 
 function onGlobalKeydown(event: KeyboardEvent) {
-  if (!event.ctrlKey || event.key !== "d") return;
-  event.preventDefault();
-  toggleDeleteMode();
+  if (!event.ctrlKey || event.key !== 'd') return
+  event.preventDefault()
+  toggleDeleteMode()
 }
 
 onMounted(() => {
-  window.addEventListener("keydown", onGlobalKeydown);
-});
+  window.addEventListener('keydown', onGlobalKeydown)
+})
 
 onBeforeUnmount(() => {
-  window.removeEventListener("keydown", onGlobalKeydown);
-});
+  window.removeEventListener('keydown', onGlobalKeydown)
+})
 
 const existingAttributeNames = computed(() => {
-  if (!context.value) return new Set<string>();
-  return new Set(Object.keys(context.value.existingAttributes));
-});
+  if (!context.value) return new Set<string>()
+  return new Set(Object.keys(context.value.existingAttributes))
+})
 
 function matchesNeedle(label: string): boolean {
-  if (!needle.value) return true;
-  return label.toLowerCase().includes(needle.value);
+  if (!needle.value) return true
+  return label.toLowerCase().includes(needle.value)
 }
 
 const visibleInsertChildren = computed(() => {
-  const children = schema.value?.children ?? [];
-  const filtered = children.filter((tag) => matchesNeedle(tag));
-  const sorted = uniqueSorted(filtered);
-  if (needle.value || showAllChildren.value) return sorted;
-  return sorted.slice(0, EXPLORER_COMMON_LIMIT);
-});
+  const children = schema.value?.children ?? []
+  const filtered = children.filter((tag) => matchesNeedle(tag))
+  const sorted = uniqueSorted(filtered)
+  if (needle.value || showAllChildren.value) return sorted
+  return sorted.slice(0, EXPLORER_COMMON_LIMIT)
+})
 
 const hiddenInsertChildCount = computed(() => {
-  if (deleteMode.value || needle.value || showAllChildren.value) return 0;
-  const total = uniqueSorted(schema.value?.children ?? []).length;
-  return Math.max(0, total - EXPLORER_COMMON_LIMIT);
-});
+  if (deleteMode.value || needle.value || showAllChildren.value) return 0
+  const total = uniqueSorted(schema.value?.children ?? []).length
+  return Math.max(0, total - EXPLORER_COMMON_LIMIT)
+})
 
 const commonAttributes = computed(() => {
-  const attrs = schema.value?.commonAttributes ?? [];
-  return uniqueSorted(attrs.filter((name) => matchesNeedle(name)));
-});
+  const attrs = schema.value?.commonAttributes ?? []
+  return uniqueSorted(attrs.filter((name) => matchesNeedle(name)))
+})
 
 const extraAttributes = computed(() => {
-  const common = new Set(schema.value?.commonAttributes ?? []);
-  const all = schema.value?.attributes ?? [];
-  return uniqueSorted(
-    all.filter((name) => !common.has(name) && matchesNeedle(name)),
-  );
-});
+  const common = new Set(schema.value?.commonAttributes ?? [])
+  const all = schema.value?.attributes ?? []
+  return uniqueSorted(all.filter((name) => !common.has(name) && matchesNeedle(name)))
+})
 
 const visibleInsertAttributes = computed(() => {
   const attrs = [
     ...commonAttributes.value,
     ...(showAllAttributes.value || needle.value ? extraAttributes.value : []),
-  ];
-  if (deleteMode.value) return [];
-  if (needle.value || showAllAttributes.value) return attrs;
-  return attrs.slice(0, EXPLORER_COMMON_LIMIT);
-});
+  ]
+  if (deleteMode.value) return []
+  if (needle.value || showAllAttributes.value) return attrs
+  return attrs.slice(0, EXPLORER_COMMON_LIMIT)
+})
 
 const hiddenInsertAttributeCount = computed(() => {
-  if (deleteMode.value || needle.value || showAllAttributes.value) return 0;
-  const total = uniqueSorted([
-    ...commonAttributes.value,
-    ...extraAttributes.value,
-  ]).length;
-  return Math.max(0, total - EXPLORER_COMMON_LIMIT);
-});
+  if (deleteMode.value || needle.value || showAllAttributes.value) return 0
+  const total = uniqueSorted([...commonAttributes.value, ...extraAttributes.value]).length
+  return Math.max(0, total - EXPLORER_COMMON_LIMIT)
+})
 
 function childLabel(node: IndexedDocumentNode): string {
-  const segment = node.path.at(-1);
-  if (!segment) return node.tag;
-  return formatPathSegment(segment);
+  const segment = node.path.at(-1)
+  if (!segment) return node.tag
+  return formatPathSegment(segment)
 }
 
 const existingChildren = computed(() => {
-  const children = selectedNode.value?.children ?? [];
-  return children.filter((child) => matchesNeedle(childLabel(child)));
-});
+  const children = selectedNode.value?.children ?? []
+  return children.filter((child) => matchesNeedle(childLabel(child)))
+})
 
 const existingAttributes = computed(() => {
-  if (!context.value) return [];
+  if (!context.value) return []
   return uniqueSorted(
-    Object.keys(context.value.existingAttributes).filter((name) =>
-      matchesNeedle(name),
-    ),
-  );
-});
+    Object.keys(context.value.existingAttributes).filter((name) => matchesNeedle(name)),
+  )
+})
 
 function isActivePath(path: PathSegment[]): boolean {
-  if (!context.value) return false;
-  return pathsEqual(path, context.value.path);
+  if (!context.value) return false
+  return pathsEqual(path, context.value.path)
 }
 
 function renderTreeLines(
   node: IndexedDocumentNode,
   depth = 0,
 ): Array<{ node: IndexedDocumentNode; depth: number }> {
-  const rows: Array<{ node: IndexedDocumentNode; depth: number }> = [
-    { node, depth },
-  ];
+  const rows: Array<{ node: IndexedDocumentNode; depth: number }> = [{ node, depth }]
   for (const child of node.children) {
-    rows.push(...renderTreeLines(child, depth + 1));
+    rows.push(...renderTreeLines(child, depth + 1))
   }
-  return rows;
+  return rows
 }
 
 const flatTree = computed(() => {
-  if (!indexedDocument.value) return [];
-  return renderTreeLines(indexedDocument.value);
-});
+  if (!indexedDocument.value) return []
+  return renderTreeLines(indexedDocument.value)
+})
 
 function onTreeClick(path: PathSegment[]) {
-  pinnedAttribute.value = null;
-  emit("selectElement", path);
+  pinnedAttribute.value = null
+  emit('selectElement', path)
 }
 
 function onAttributeChipClick(name: string) {
@@ -249,21 +241,45 @@ function onAttributeChipClick(name: string) {
       valueEnd: 0,
       quoted: true,
       quoteChar: '"',
-    };
+    }
   } else {
-    pinnedAttribute.value = null;
+    pinnedAttribute.value = null
   }
-  emit("insertAttribute", name);
+  emit('insertAttribute', name)
 }
 
+watch(activeAttribute, (attr) => {
+  if (attr?.attrName !== 'points') {
+    selectedPointIndex.value = null
+  }
+  emitPreviewState()
+})
+
+watch(selectedPointIndex, () => emitPreviewState())
+
+function emitPreviewState() {
+  emit('previewStateChange', {
+    attribute: activeAttribute.value,
+    selectedPointIndex: selectedPointIndex.value,
+  })
+}
+
+function onSelectPoint(index: number | null) {
+  selectedPointIndex.value = index
+}
+
+function setSelectedPointIndex(index: number | null) {
+  selectedPointIndex.value = index
+  emitPreviewState()
+}
+
+defineExpose({ setSelectedPointIndex })
+
+onMounted(() => emitPreviewState())
+
 function onAttributeUpdate(value: string) {
-  if (!activeAttribute.value) return;
-  emit(
-    "updateAttribute",
-    activeAttribute.value.path,
-    activeAttribute.value.attrName,
-    value,
-  );
+  if (!activeAttribute.value) return
+  emit('updateAttribute', activeAttribute.value.path, activeAttribute.value.attrName, value)
 }
 </script>
 
@@ -286,7 +302,7 @@ function onAttributeUpdate(value: string) {
           class="svg-explorer__mode-label"
           :class="{ 'svg-explorer__mode-label--delete': deleteMode }"
         >
-          {{ deleteMode ? "Delete Mode" : "Insert Mode" }}
+          {{ deleteMode ? 'Delete Mode' : 'Insert Mode' }}
         </span>
         <div class="svg-explorer__mode-toggle">
           <span
@@ -328,7 +344,7 @@ function onAttributeUpdate(value: string) {
 
       <section v-if="context" class="svg-explorer__section">
         <h3 class="svg-explorer__heading">
-          {{ deleteMode ? "Selected" : "At cursor" }}
+          {{ deleteMode ? 'Selected' : 'At cursor' }}
         </h3>
         <p class="svg-explorer__target">
           <code>&lt;{{ context.tagName }}&gt;</code>
@@ -445,11 +461,7 @@ function onAttributeUpdate(value: string) {
                 present: existingAttributeNames.has(name),
                 selected: activeAttribute?.attrName === name,
               }"
-              :title="
-                existingAttributeNames.has(name)
-                  ? `Adjust ${name}`
-                  : `Insert ${name}`
-              "
+              :title="existingAttributeNames.has(name) ? `Adjust ${name}` : `Insert ${name}`"
               @click="onAttributeChipClick(name)"
             >
               {{ name }}
@@ -471,15 +483,17 @@ function onAttributeUpdate(value: string) {
         :key="attributeIdentity(activeAttribute)"
         :attribute="activeAttribute"
         :content="content"
+        :focus-point-index="selectedPointIndex"
         class="svg-explorer__section"
         @update="onAttributeUpdate"
+        @select-point="onSelectPoint"
       />
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
-@use "../styles/variables" as *;
+@use '../styles/variables' as *;
 
 .svg-explorer {
   display: flex;
@@ -529,7 +543,9 @@ function onAttributeUpdate(value: string) {
   &__mode-icon {
     color: $color-text-muted;
     opacity: 0.45;
-    transition: color 0.15s, opacity 0.15s;
+    transition:
+      color 0.15s,
+      opacity 0.15s;
 
     &.active {
       color: inherit;
@@ -555,7 +571,9 @@ function onAttributeUpdate(value: string) {
     background: $color-bg;
     cursor: pointer;
     flex-shrink: 0;
-    transition: background 0.15s, border-color 0.15s;
+    transition:
+      background 0.15s,
+      border-color 0.15s;
 
     &:hover {
       border-color: var(--border-strong);
@@ -580,7 +598,9 @@ function onAttributeUpdate(value: string) {
     height: 14px;
     border-radius: 50%;
     background: $color-accent;
-    transition: transform 0.15s ease, background 0.15s;
+    transition:
+      transform 0.15s ease,
+      background 0.15s;
 
     &--delete {
       transform: translateX(16px);
@@ -682,7 +702,7 @@ function onAttributeUpdate(value: string) {
   &__tree-attr {
     color: $color-text-muted;
     &::before {
-      content: "@";
+      content: '@';
       opacity: 0.6;
     }
   }
@@ -701,7 +721,10 @@ function onAttributeUpdate(value: string) {
     color: $color-text;
     font-family: $font-mono;
     font-size: 0.75rem;
-    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    transition:
+      background 0.12s,
+      border-color 0.12s,
+      color 0.12s;
 
     &:hover {
       border-color: $color-accent;

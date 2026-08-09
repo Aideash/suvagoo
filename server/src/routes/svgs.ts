@@ -1,80 +1,74 @@
-import { Router } from "express";
-import {
-  createSvg,
-  deleteSvg,
-  getSvg,
-  listSvgs,
-  updateSvg,
-} from "../storage/fs.js";
+import { Router } from 'express'
+import { createSvg, deleteSvg, getSvg, listSvgs, updateSvg } from '../storage/fs.js'
 
-const router = Router();
+const router = Router()
 
-router.get("/", async (_req, res) => {
+router.get('/', async (_req, res) => {
   try {
-    const svgs = await listSvgs();
-    res.json(svgs);
+    const svgs = await listSvgs()
+    res.json(svgs)
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to list SVGs" });
+    console.error(err)
+    res.status(500).json({ error: 'Failed to list SVGs' })
   }
-});
+})
 
-router.get("/:id", async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const svg = await getSvg(req.params.id);
+    const svg = await getSvg(req.params.id)
     if (!svg) {
-      res.status(404).json({ error: "SVG not found" });
-      return;
+      res.status(404).json({ error: 'SVG not found' })
+      return
     }
-    res.json(svg);
+    res.json(svg)
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to get SVG" });
+    console.error(err)
+    res.status(500).json({ error: 'Failed to get SVG' })
   }
-});
+})
 
-router.post("/", async (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const { name, content } = req.body as { name?: string; content?: string };
+    const { name, content } = req.body as { name?: string; content?: string }
     if (!content) {
-      res.status(400).json({ error: "content is required" });
-      return;
+      res.status(400).json({ error: 'content is required' })
+      return
     }
-    const svg = await createSvg({ name: name ?? "Untitled SVG", content });
-    res.status(201).json(svg);
+    const svg = await createSvg({ name: name ?? 'Untitled SVG', content })
+    res.status(201).json(svg)
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to create SVG";
-    res.status(400).json({ error: message });
+    const message = err instanceof Error ? err.message : 'Failed to create SVG'
+    res.status(400).json({ error: message })
   }
-});
+})
 
-router.put("/:id", async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    const { name, content } = req.body as { name?: string; content?: string };
-    const svg = await updateSvg(req.params.id, { name, content });
+    const { name, content } = req.body as { name?: string; content?: string }
+    const svg = await updateSvg(req.params.id, { name, content })
     if (!svg) {
-      res.status(404).json({ error: "SVG not found" });
-      return;
+      res.status(404).json({ error: 'SVG not found' })
+      return
     }
-    res.json(svg);
+    res.json(svg)
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to update SVG";
-    res.status(400).json({ error: message });
+    const message = err instanceof Error ? err.message : 'Failed to update SVG'
+    res.status(400).json({ error: message })
   }
-});
+})
 
-router.delete("/:id", async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
-    const deleted = await deleteSvg(req.params.id);
+    const deleted = await deleteSvg(req.params.id)
     if (!deleted) {
-      res.status(404).json({ error: "SVG not found" });
-      return;
+      res.status(404).json({ error: 'SVG not found' })
+      return
     }
-    res.status(204).send();
+    res.status(204).send()
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to delete SVG" });
+    console.error(err)
+    res.status(500).json({ error: 'Failed to delete SVG' })
   }
-});
+})
 
-export default router;
+export default router

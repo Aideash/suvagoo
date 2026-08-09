@@ -1,5 +1,5 @@
-@use "variables" as *;
-@import "material-icons/iconfont/filled.css";
+@use 'variables' as *;
+@import 'material-icons/iconfont/filled.css';
 
 /*
  * Colour tokens are written onto <html> by src/themes/manager.ts. The values
@@ -135,7 +135,10 @@ button.ghost {
   border-radius: $radius-sm;
   font-size: 0.875rem;
   font-weight: 500;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 
   &--primary {
     background: var(--accent);

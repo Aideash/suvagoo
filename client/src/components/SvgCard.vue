@@ -1,34 +1,34 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import type { SvgMeta } from "../api/svgs";
-import { getSvg } from "../api/svgs";
-import SvgPreview from "./SvgPreview.vue";
+import { ref } from 'vue'
+import type { SvgMeta } from '../api/svgs'
+import { getSvg } from '../api/svgs'
+import SvgPreview from './SvgPreview.vue'
 
 defineProps<{
-  svg: SvgMeta;
-}>();
+  svg: SvgMeta
+}>()
 
 const emit = defineEmits<{
-  delete: [id: string];
-}>();
+  delete: [id: string]
+}>()
 
-const previewContent = ref("");
+const previewContent = ref('')
 
 async function loadPreview(id: string) {
   try {
-    const record = await getSvg(id);
-    previewContent.value = record.content;
+    const record = await getSvg(id)
+    previewContent.value = record.content
   } catch {
-    previewContent.value = "";
+    previewContent.value = ''
   }
 }
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
 }
 </script>
 
@@ -40,10 +40,7 @@ function formatDate(iso: string): string {
       @mouseenter="loadPreview(svg.id)"
       @focusin="loadPreview(svg.id)"
     >
-      <SvgPreview
-        :content="previewContent"
-        empty-message="Hover to preview"
-      />
+      <SvgPreview :content="previewContent" empty-message="Hover to preview" />
     </RouterLink>
 
     <div class="svg-card__body">
@@ -55,23 +52,13 @@ function formatDate(iso: string): string {
       <p class="svg-card__date">Updated {{ formatDate(svg.updatedAt) }}</p>
 
       <div class="svg-card__actions">
-        <RouterLink
-          :to="{ name: 'view', params: { id: svg.id } }"
-          class="btn btn--secondary"
-        >
+        <RouterLink :to="{ name: 'view', params: { id: svg.id } }" class="btn btn--secondary">
           View
         </RouterLink>
-        <RouterLink
-          :to="{ name: 'edit', params: { id: svg.id } }"
-          class="btn btn--secondary"
-        >
+        <RouterLink :to="{ name: 'edit', params: { id: svg.id } }" class="btn btn--secondary">
           Edit
         </RouterLink>
-        <button
-          type="button"
-          class="btn btn--danger"
-          @click="emit('delete', svg.id)"
-        >
+        <button type="button" class="btn btn--danger" @click="emit('delete', svg.id)">
           Delete
         </button>
       </div>
@@ -80,7 +67,7 @@ function formatDate(iso: string): string {
 </template>
 
 <style scoped lang="scss">
-@use "../styles/variables" as *;
+@use '../styles/variables' as *;
 
 .svg-card {
   background: $color-surface;

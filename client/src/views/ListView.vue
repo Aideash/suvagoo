@@ -1,41 +1,41 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { deleteSvg, listSvgs, type SvgMeta } from "../api/svgs";
-import SvgCard from "../components/SvgCard.vue";
-import ThemePicker from "../components/ThemePicker.vue";
+import { onMounted, ref } from 'vue'
+import { deleteSvg, listSvgs, type SvgMeta } from '../api/svgs'
+import SvgCard from '../components/SvgCard.vue'
+import ThemePicker from '../components/ThemePicker.vue'
 
-const svgs = ref<SvgMeta[]>([]);
-const loading = ref(true);
-const error = ref("");
+const svgs = ref<SvgMeta[]>([])
+const loading = ref(true)
+const error = ref('')
 
 async function loadSvgs() {
-  loading.value = true;
-  error.value = "";
+  loading.value = true
+  error.value = ''
   try {
-    svgs.value = await listSvgs();
+    svgs.value = await listSvgs()
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Failed to load SVGs";
+    error.value = err instanceof Error ? err.message : 'Failed to load SVGs'
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 
 async function handleDelete(id: string) {
-  const svg = svgs.value.find((s) => s.id === id);
-  if (!svg) return;
+  const svg = svgs.value.find((s) => s.id === id)
+  if (!svg) return
 
-  const confirmed = window.confirm(`Delete "${svg.name}"?`);
-  if (!confirmed) return;
+  const confirmed = window.confirm(`Delete "${svg.name}"?`)
+  if (!confirmed) return
 
   try {
-    await deleteSvg(id);
-    svgs.value = svgs.value.filter((s) => s.id !== id);
+    await deleteSvg(id)
+    svgs.value = svgs.value.filter((s) => s.id !== id)
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Failed to delete SVG";
+    error.value = err instanceof Error ? err.message : 'Failed to delete SVG'
   }
 }
 
-onMounted(loadSvgs);
+onMounted(loadSvgs)
 </script>
 
 <template>
@@ -58,19 +58,14 @@ onMounted(loadSvgs);
       </div>
 
       <div v-else class="svg-grid">
-        <SvgCard
-          v-for="svg in svgs"
-          :key="svg.id"
-          :svg="svg"
-          @delete="handleDelete"
-        />
+        <SvgCard v-for="svg in svgs" :key="svg.id" :svg="svg" @delete="handleDelete" />
       </div>
     </main>
   </div>
 </template>
 
 <style scoped lang="scss">
-@use "../styles/variables" as *;
+@use '../styles/variables' as *;
 
 .svg-grid {
   display: grid;

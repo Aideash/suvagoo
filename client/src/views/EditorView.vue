@@ -1,16 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import {
-  STARTER_SVG,
-  createSvg,
-  getSvg,
-  updateSvg,
-} from "../api/svgs";
-import SvgEditor from "../components/SvgEditor.vue";
-import SvgPreview from "../components/SvgPreview.vue";
-import SvgStructureExplorer from "../components/SvgStructureExplorer.vue";
-import ThemePicker from "../components/ThemePicker.vue";
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { STARTER_SVG, createSvg, getSvg, updateSvg } from '../api/svgs'
+import SvgEditor from '../components/SvgEditor.vue'
+import SvgPreview from '../components/SvgPreview.vue'
+import SvgStructureExplorer from '../components/SvgStructureExplorer.vue'
+import ThemePicker from '../components/ThemePicker.vue'
 import {
   cursorOffsetForPath,
   deleteAttribute,
@@ -19,155 +14,195 @@ import {
   insertAttribute,
   insertChildElement,
   updateAttribute,
+  type AttributeContext,
   type PathSegment,
-} from "../lib/svgDocument";
+} from '../lib/svgDocument'
+import { parsePoints } from '../lib/pointsAttribute'
 
-const route = useRoute();
-const router = useRouter();
+const route = useRoute()
+const router = useRouter()
 
-const isEditing = computed(() => Boolean(route.params.id));
-const name = ref("Untitled SVG");
-const content = ref(STARTER_SVG);
-const cursorOffset = ref(0);
-const builderError = ref("");
-const loading = ref(false);
-const saving = ref(false);
-const error = ref("");
+const isEditing = computed(() => Boolean(route.params.id))
+const name = ref('Untitled SVG')
+const content = ref(STARTER_SVG)
+const cursorOffset = ref(0)
+const builderError = ref('')
+const loading = ref(false)
+const saving = ref(false)
+const error = ref('')
 
-const editorRef = ref<InstanceType<typeof SvgEditor> | null>(null);
-const explorerOpen = ref(true);
+const editorRef = ref<InstanceType<typeof SvgEditor> | null>(null)
+const explorerRef = ref<InstanceType<typeof SvgStructureExplorer> | null>(null)
+const explorerOpen = ref(true)
+
+const previewState = ref<{
+  attribute: AttributeContext | null
+  selectedPointIndex: number | null
+}>({
+  attribute: null,
+  selectedPointIndex: null,
+})
+
+const pointsEdit = computed(() => {
+  const attr = previewState.value.attribute
+  if (!attr || attr.attrName !== 'points') return null
+  const points = parsePoints(attr.value)
+  if (!points) return null
+  return {
+    path: attr.path,
+    points,
+    selectedIndex: previewState.value.selectedPointIndex,
+  }
+})
 
 onMounted(async () => {
-  if (!isEditing.value) return;
+  if (!isEditing.value) return
 
-  loading.value = true;
-  error.value = "";
+  loading.value = true
+  error.value = ''
   try {
-    const svg = await getSvg(route.params.id as string);
-    name.value = svg.name;
-    content.value = svg.content;
+    const svg = await getSvg(route.params.id as string)
+    name.value = svg.name
+    content.value = svg.content
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Failed to load SVG";
+    error.value = err instanceof Error ? err.message : 'Failed to load SVG'
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-});
+})
 
 async function persistSvg(): Promise<string> {
   if (isEditing.value) {
     await updateSvg(route.params.id as string, {
       name: name.value,
       content: content.value,
-    });
-    return route.params.id as string;
+    })
+    return route.params.id as string
   }
 
   const created = await createSvg({
     name: name.value,
     content: content.value,
-  });
-  return created.id;
+  })
+  return created.id
 }
 
 async function save() {
-  saving.value = true;
-  error.value = "";
+  saving.value = true
+  error.value = ''
   try {
-    const id = await persistSvg();
+    const id = await persistSvg()
     if (!isEditing.value) {
-      await router.replace({ name: "edit", params: { id } });
+      await router.replace({ name: 'edit', params: { id } })
     }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Failed to save SVG";
+    error.value = err instanceof Error ? err.message : 'Failed to save SVG'
   } finally {
-    saving.value = false;
+    saving.value = false
   }
 }
 
 async function saveAndExit() {
-  saving.value = true;
-  error.value = "";
+  saving.value = true
+  error.value = ''
   try {
-    const id = await persistSvg();
-    router.push({ name: "view", params: { id } });
+    const id = await persistSvg()
+    router.push({ name: 'view', params: { id } })
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Failed to save SVG";
+    error.value = err instanceof Error ? err.message : 'Failed to save SVG'
   } finally {
-    saving.value = false;
+    saving.value = false
   }
 }
 
 function cancel() {
   if (isEditing.value) {
-    router.push({ name: "view", params: { id: route.params.id } });
+    router.push({ name: 'view', params: { id: route.params.id } })
   } else {
-    router.push({ name: "list" });
+    router.push({ name: 'list' })
   }
 }
 
 function onInsertChild(tagName: string) {
-  builderError.value = "";
-  const result = insertChildElement(content.value, cursorOffset.value, tagName);
+  builderError.value = ''
+  const result = insertChildElement(content.value, cursorOffset.value, tagName)
   if (!result) {
-    builderError.value = `Could not insert <${tagName}> at the cursor.`;
-    return;
+    builderError.value = `Could not insert <${tagName}> at the cursor.`
+    return
   }
-  editorRef.value?.applyChange(result.content, result.cursor);
+  editorRef.value?.applyChange(result.content, result.cursor)
 }
 
 function onInsertAttribute(name: string) {
-  builderError.value = "";
-  const result = insertAttribute(content.value, cursorOffset.value, name);
+  builderError.value = ''
+  const result = insertAttribute(content.value, cursorOffset.value, name)
   if (!result) {
-    builderError.value = `Could not insert attribute ${name} at the cursor.`;
-    return;
+    builderError.value = `Could not insert attribute ${name} at the cursor.`
+    return
   }
-  editorRef.value?.applyChange(result.content, result.cursor);
+  editorRef.value?.applyChange(result.content, result.cursor)
 }
 
 function onSelectElement(path: PathSegment[]) {
-  builderError.value = "";
-  const offset = cursorOffsetForPath(content.value, path);
+  builderError.value = ''
+  const offset = cursorOffsetForPath(content.value, path)
   if (offset == null) {
-    builderError.value = "Could not locate that element in the source.";
-    return;
+    builderError.value = 'Could not locate that element in the source.'
+    return
   }
-  editorRef.value?.setCursor(offset);
+  editorRef.value?.setCursor(offset)
 }
 
 function onDeleteChild(path: PathSegment[]) {
-  builderError.value = "";
-  const result = deleteChildElement(content.value, path);
+  builderError.value = ''
+  const result = deleteChildElement(content.value, path)
   if (!result) {
-    builderError.value = "Could not delete that element.";
-    return;
+    builderError.value = 'Could not delete that element.'
+    return
   }
-  editorRef.value?.applyChange(result.content, result.cursor);
+  editorRef.value?.applyChange(result.content, result.cursor)
 }
 
 function onDeleteAttribute(name: string) {
-  builderError.value = "";
-  const path = findElementAtOffset(content.value, cursorOffset.value)?.path;
+  builderError.value = ''
+  const path = findElementAtOffset(content.value, cursorOffset.value)?.path
   if (!path) {
-    builderError.value = `Could not delete attribute ${name}.`;
-    return;
+    builderError.value = `Could not delete attribute ${name}.`
+    return
   }
-  const result = deleteAttribute(content.value, path, name);
+  const result = deleteAttribute(content.value, path, name)
   if (!result) {
-    builderError.value = `Could not delete attribute ${name}.`;
-    return;
+    builderError.value = `Could not delete attribute ${name}.`
+    return
   }
-  editorRef.value?.applyChange(result.content, result.cursor);
+  editorRef.value?.applyChange(result.content, result.cursor)
 }
 
 function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
-  builderError.value = "";
-  const result = updateAttribute(content.value, path, name, value);
+  builderError.value = ''
+  const result = updateAttribute(content.value, path, name, value)
   if (!result) {
-    builderError.value = `Could not update attribute ${name}.`;
-    return;
+    builderError.value = `Could not update attribute ${name}.`
+    return
   }
-  editorRef.value?.applyChange(result.content, result.cursor);
+  editorRef.value?.applyChange(result.content, result.cursor)
+}
+
+function onPreviewStateChange(state: {
+  attribute: AttributeContext | null
+  selectedPointIndex: number | null
+}) {
+  previewState.value = state
+}
+
+function onPreviewSelectPoint(index: number) {
+  explorerRef.value?.setSelectedPointIndex(index)
+}
+
+function onPreviewUpdatePoints(value: string) {
+  const attr = previewState.value.attribute
+  if (!attr) return
+  onUpdateAttribute(attr.path, attr.attrName, value)
 }
 </script>
 
@@ -175,15 +210,8 @@ function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
   <div class="editor-view">
     <header class="page-header">
       <div class="editor-view__header-left">
-        <button type="button" class="btn btn--secondary" @click="cancel">
-          ← Back
-        </button>
-        <input
-          v-model="name"
-          type="text"
-          class="input editor-view__name"
-          placeholder="SVG name"
-        />
+        <button type="button" class="btn btn--secondary" @click="cancel">← Back</button>
+        <input v-model="name" type="text" class="input editor-view__name" placeholder="SVG name" />
       </div>
       <div class="page-header__actions">
         <button
@@ -192,7 +220,7 @@ function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
           :disabled="saving || loading"
           @click="save"
         >
-          {{ saving ? "Saving…" : "Save" }}
+          {{ saving ? 'Saving…' : 'Save' }}
         </button>
         <button
           type="button"
@@ -200,7 +228,7 @@ function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
           :disabled="saving || loading"
           @click="saveAndExit"
         >
-          {{ saving ? "Saving…" : "Save & exit" }}
+          {{ saving ? 'Saving…' : 'Save & exit' }}
         </button>
         <span class="separator" style="width: 5px"></span>
         <ThemePicker />
@@ -225,11 +253,12 @@ function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
             @click="explorerOpen = !explorerOpen"
           >
             <span class="material-icons sm">
-              {{ explorerOpen ? "chevron_left" : "account_tree" }}
+              {{ explorerOpen ? 'chevron_left' : 'account_tree' }}
             </span>
           </button>
         </div>
         <SvgStructureExplorer
+          ref="explorerRef"
           v-show="explorerOpen"
           :content="content"
           :cursor-offset="cursorOffset"
@@ -239,21 +268,24 @@ function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
           @delete-child="onDeleteChild"
           @delete-attribute="onDeleteAttribute"
           @update-attribute="onUpdateAttribute"
+          @preview-state-change="onPreviewStateChange"
         />
       </aside>
 
       <div class="editor-view__main">
         <section class="editor-view__pane editor-view__pane--code">
           <h2 class="editor-view__label">Code</h2>
-          <SvgEditor
-            ref="editorRef"
-            v-model="content"
-            @cursor-change="cursorOffset = $event"
-          />
+          <SvgEditor ref="editorRef" v-model="content" @cursor-change="cursorOffset = $event" />
         </section>
         <section class="editor-view__pane editor-view__pane--preview">
           <h2 class="editor-view__label">Preview</h2>
-          <SvgPreview :content="content" />
+          <SvgPreview
+            :content="content"
+            :points-edit="pointsEdit"
+            show-axes
+            @select-point="onPreviewSelectPoint"
+            @update-points="onPreviewUpdatePoints"
+          />
         </section>
       </div>
     </div>
@@ -261,7 +293,7 @@ function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
 </template>
 
 <style scoped lang="scss">
-@use "../styles/variables" as *;
+@use '../styles/variables' as *;
 
 .editor-view {
   display: flex;
@@ -307,7 +339,9 @@ function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
     min-width: 220px;
     flex-shrink: 0;
     min-height: 0;
-    transition: width 0.2s ease, min-width 0.2s ease;
+    transition:
+      width 0.2s ease,
+      min-width 0.2s ease;
     padding: $spacing-md $spacing-sm;
     border-right: 1px solid var(--border);
     background: var(--bg-raised);
@@ -347,7 +381,10 @@ function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
     background: $color-surface;
     color: $color-text-muted;
     cursor: pointer;
-    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    transition:
+      background 0.12s,
+      color 0.12s,
+      border-color 0.12s;
 
     &:hover {
       background: $color-surface-hover;
@@ -378,13 +415,13 @@ function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
     gap: $spacing-sm;
 
     &--code {
-      flex: 1 1 0;
+      flex: 3 1 0;
       min-height: 0;
       overflow: hidden;
     }
 
     &--preview {
-      flex: 0 0 min(240px, 32vh);
+      flex: 1 0 min(240px, 32vh);
       min-height: 120px;
       overflow: hidden;
     }

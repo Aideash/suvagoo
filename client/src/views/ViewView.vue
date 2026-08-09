@@ -1,36 +1,36 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { useRoute } from "vue-router";
-import { getSvg, type SvgRecord } from "../api/svgs";
-import SvgPreview from "../components/SvgPreview.vue";
-import ThemePicker from "../components/ThemePicker.vue";
+import { onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { getSvg, type SvgRecord } from '../api/svgs'
+import SvgPreview from '../components/SvgPreview.vue'
+import ThemePicker from '../components/ThemePicker.vue'
 
-const route = useRoute();
-const svg = ref<SvgRecord | null>(null);
-const loading = ref(true);
-const error = ref("");
+const route = useRoute()
+const svg = ref<SvgRecord | null>(null)
+const loading = ref(true)
+const error = ref('')
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 onMounted(async () => {
-  loading.value = true;
-  error.value = "";
+  loading.value = true
+  error.value = ''
   try {
-    svg.value = await getSvg(route.params.id as string);
+    svg.value = await getSvg(route.params.id as string)
   } catch (err) {
-    error.value = err instanceof Error ? err.message : "Failed to load SVG";
+    error.value = err instanceof Error ? err.message : 'Failed to load SVG'
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-});
+})
 </script>
 
 <template>
@@ -58,9 +58,7 @@ onMounted(async () => {
       <p v-else-if="error" class="error-banner">{{ error }}</p>
 
       <template v-else-if="svg">
-        <p class="view-view__meta">
-          Updated {{ formatDate(svg.updatedAt) }}
-        </p>
+        <p class="view-view__meta">Updated {{ formatDate(svg.updatedAt) }}</p>
         <div class="view-view__preview">
           <SvgPreview :content="svg.content" />
         </div>
@@ -70,7 +68,7 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-@use "../styles/variables" as *;
+@use '../styles/variables' as *;
 
 .view-view {
   min-height: 100vh;
