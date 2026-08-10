@@ -13,16 +13,20 @@ import {
 } from '../lib/attributeSchema'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
 import PointsAttributeAdjuster from './PointsAttributeAdjuster.vue'
+import PathAttributeAdjuster from './PathAttributeAdjuster.vue'
+import DualNumericAttributeAdjuster from './DualNumericAttributeAdjuster.vue'
 
 const props = defineProps<{
   attribute: AttributeContext
   content: string
   focusPointIndex?: number | null
+  focusCommandIndex?: number | null
 }>()
 
 const emit = defineEmits<{
   update: [value: string]
   selectPoint: [index: number | null]
+  selectCommand: [index: number | null]
 }>()
 
 const draft = ref(props.attribute.value)
@@ -334,6 +338,22 @@ function onEnumChange(event: Event) {
       :focus-point-index="focusPointIndex"
       @update="commit"
       @select-point="emit('selectPoint', $event)"
+    />
+
+    <PathAttributeAdjuster
+      v-else-if="schema.kind === 'path'"
+      :attribute="attribute"
+      :content="content"
+      :focus-command-index="focusCommandIndex"
+      @update="commit"
+      @select-command="emit('selectCommand', $event)"
+    />
+
+    <DualNumericAttributeAdjuster
+      v-else-if="schema.kind === 'dual-number'"
+      :attribute="attribute"
+      :content="content"
+      @update="commit"
     />
 
     <div v-else-if="isLengthKind" class="attr-adjuster__controls">

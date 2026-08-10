@@ -287,3 +287,127 @@ button.ghost {
 .cm-activeLineGutter {
   background: var(--overlay-soft) !important;
 }
+
+// CodeMirror chrome — panels (find/replace), tooltips, autocomplete, etc.
+.cm-panels {
+  background: var(--bg-raised) !important;
+  color: var(--text) !important;
+}
+
+.cm-panels-top {
+  border-bottom: 1px solid var(--border) !important;
+}
+
+.cm-panels-bottom {
+  border-top: 1px solid var(--border) !important;
+}
+
+.cm-panel.cm-search label {
+  color: var(--text-dim);
+}
+
+.cm-button {
+  background: var(--bg-hover) !important;
+  background-image: none !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius);
+  color: var(--text) !important;
+
+  &:active {
+    background: var(--bg-input) !important;
+    background-image: none !important;
+  }
+}
+
+.cm-textfield {
+  background: var(--bg-input) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius);
+  color: var(--text) !important;
+}
+
+.cm-searchMatch {
+  background-color: color-mix(in srgb, var(--amber) 30%, transparent) !important;
+}
+
+.cm-searchMatch-selected {
+  background-color: color-mix(in srgb, var(--accent) 35%, transparent) !important;
+}
+
+.cm-selectionMatch {
+  background-color: color-mix(in srgb, var(--accent) 15%, transparent) !important;
+}
+
+.cm-selectionMatch-main {
+  background-color: color-mix(in srgb, var(--accent) 25%, transparent) !important;
+}
+
+.cm-searchMatch .cm-selectionMatch {
+  background-color: transparent !important;
+}
+
+.cm-tooltip {
+  background: var(--bg-raised) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px var(--shadow);
+  color: var(--text) !important;
+}
+
+.cm-tooltip-section:not(:first-child) {
+  border-top: 1px solid var(--border) !important;
+}
+
+.cm-tooltip .cm-tooltip-arrow {
+  &::before {
+    border-top-color: var(--border) !important;
+    border-bottom-color: var(--border) !important;
+  }
+
+  &::after {
+    border-top-color: var(--bg-raised) !important;
+    border-bottom-color: var(--bg-raised) !important;
+  }
+}
+
+.cm-tooltip-autocomplete ul {
+  font-family: var(--mono) !important;
+
+  li[aria-selected] {
+    background: var(--accent) !important;
+    color: var(--on-accent) !important;
+  }
+
+  completion-section {
+    border-bottom-color: var(--border) !important;
+    color: var(--text-dim);
+  }
+}
+
+.cm-completionDetail {
+  color: var(--text-dim) !important;
+}
+
+.cm-completionMatchedText {
+  color: var(--accent) !important;
+  text-decoration-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.cm-completionInfo {
+  background: var(--bg-raised) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.cm-dialog {
+  background: var(--bg-raised) !important;
+  color: var(--text) !important;
+}
+
+.cm-specialChar {
+  color: var(--red) !important;
+}
+
+.cm-placeholder {
+  color: var(--text-faint) !important;
+}

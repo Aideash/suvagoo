@@ -71,6 +71,48 @@ const DEFS_CHILDREN = [
 
 const GRADIENT_CHILDREN = ['stop'] as const
 
+const FILTER_PRIMITIVE_CHILDREN = [
+  'feBlend',
+  'feColorMatrix',
+  'feComponentTransfer',
+  'feComposite',
+  'feConvolveMatrix',
+  'feDiffuseLighting',
+  'feDisplacementMap',
+  'feDropShadow',
+  'feFlood',
+  'feGaussianBlur',
+  'feImage',
+  'feMerge',
+  'feMorphology',
+  'feOffset',
+  'feSpecularLighting',
+  'feTile',
+  'feTurbulence',
+] as const
+
+const FE_LIGHT_CHILDREN = ['feDistantLight', 'fePointLight', 'feSpotLight'] as const
+const FE_FUNC_CHILDREN = ['feFuncR', 'feFuncG', 'feFuncB', 'feFuncA'] as const
+
+/** Standard geometry/result attrs on filter primitives (SVGFilterPrimitiveStandardAttributes). */
+const FE_STD_ATTRIBUTES = ['x', 'y', 'width', 'height', 'result', 'color-interpolation-filters'] as const
+
+function feElement(
+  tag: string,
+  commonAttributes: readonly string[],
+  extraAttributes: readonly string[],
+  children: readonly string[],
+  snippet: string,
+): SvgElementSchema {
+  return {
+    tag,
+    commonAttributes,
+    attributes: [...commonAttributes, ...extraAttributes, ...FE_STD_ATTRIBUTES, ...GLOBAL_ATTRIBUTES],
+    children,
+    snippet,
+  }
+}
+
 const SVG_ELEMENTS: SvgElementSchema[] = [
   {
     tag: 'svg',
@@ -196,8 +238,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     commonAttributes: ['id'],
     attributes: ['id', ...GLOBAL_ATTRIBUTES],
     children: [...DEFS_CHILDREN],
-    snippet:
-      '<linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient>',
+    snippet: '<defs></defs>',
   },
   {
     tag: 'use',
@@ -212,7 +253,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     attributes: ['id', 'viewBox', 'width', 'height', 'preserveAspectRatio', ...GLOBAL_ATTRIBUTES],
     children: [...GRAPHICAL_CHILDREN],
     snippet:
-      '<symbol id="icon" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#3b82f6"/></symbol>',
+      '<symbol id="icon" viewBox="0 0 100 100"></symbol>',
   },
   {
     tag: 'linearGradient',
@@ -230,7 +271,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       ...GLOBAL_ATTRIBUTES,
     ],
     children: [...GRADIENT_CHILDREN],
-    snippet: '<stop offset="0%" stop-color="#3b82f6"/>',
+    snippet: '<linearGradient></linearGradient>',
   },
   {
     tag: 'radialGradient',
@@ -249,7 +290,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       ...GLOBAL_ATTRIBUTES,
     ],
     children: [...GRADIENT_CHILDREN],
-    snippet: '<stop offset="0%" stop-color="#3b82f6"/>',
+    snippet: '<radialGradient></radialGradient>',
   },
   {
     tag: 'stop',
@@ -263,7 +304,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     commonAttributes: ['id', 'clipPathUnits'],
     attributes: ['id', 'clipPathUnits', ...GLOBAL_ATTRIBUTES],
     children: [...GRAPHICAL_CHILDREN],
-    snippet: '<rect x="0" y="0" width="100" height="100"/>',
+    snippet: '<clipPath></clipPath>',
   },
   {
     tag: 'mask',
@@ -279,7 +320,24 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       ...GLOBAL_ATTRIBUTES,
     ],
     children: [...GRAPHICAL_CHILDREN],
-    snippet: '<rect x="0" y="0" width="100" height="100" fill="#fff"/>',
+    snippet: '<mask></mask>',
+  },
+  {
+    tag: 'filter',
+    commonAttributes: ['id', 'x', 'y', 'width', 'height', 'filterUnits'],
+    attributes: [
+      'id',
+      'x',
+      'y',
+      'width',
+      'height',
+      'filterUnits',
+      'primitiveUnits',
+      'href',
+      ...GLOBAL_ATTRIBUTES,
+    ],
+    children: [...FILTER_PRIMITIVE_CHILDREN],
+    snippet: '<filter id="filter-id"><feGaussianBlur stdDeviation="3"/></filter>',
   },
   {
     tag: 'image',
@@ -289,6 +347,157 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     snippet:
       '<image href="" x="0" y="0" width="100" height="100" preserveAspectRatio="xMidYMid meet"/>',
   },
+  feElement(
+    'feBlend',
+    ['mode', 'in', 'in2', 'result'],
+    [],
+    [],
+    '<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImage" result="blend"/>',
+  ),
+  feElement(
+    'feColorMatrix',
+    ['in', 'type', 'values', 'result'],
+    [],
+    [],
+    '<feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" result="colorMatrix"/>',
+  ),
+  feElement(
+    'feComponentTransfer',
+    ['in', 'result'],
+    [],
+    [...FE_FUNC_CHILDREN],
+    '<feComponentTransfer in="SourceGraphic" result="transfer"><feFuncR type="identity"/></feComponentTransfer>',
+  ),
+  feElement(
+    'feComposite',
+    ['in', 'in2', 'operator', 'result'],
+    ['k1', 'k2', 'k3', 'k4'],
+    [],
+    '<feComposite in="SourceGraphic" in2="BackgroundImage" operator="over" result="composite"/>',
+  ),
+  feElement(
+    'feConvolveMatrix',
+    ['in', 'order', 'kernelMatrix', 'result'],
+    ['divisor', 'bias', 'targetX', 'targetY', 'edgeMode', 'kernelUnitLength', 'preserveAlpha'],
+    [],
+    '<feConvolveMatrix in="SourceGraphic" order="3" kernelMatrix="0 0 0  0 1 0  0 0 0" result="convolve"/>',
+  ),
+  feElement(
+    'feDiffuseLighting',
+    ['in', 'surfaceScale', 'diffuseConstant', 'lighting-color', 'result'],
+    [],
+    [...FE_LIGHT_CHILDREN],
+    '<feDiffuseLighting in="SourceAlpha" surfaceScale="1" diffuseConstant="1" lighting-color="#ffffff" result="diffuse"><feDistantLight azimuth="45" elevation="45"/></feDiffuseLighting>',
+  ),
+  feElement(
+    'feDisplacementMap',
+    ['in', 'in2', 'scale', 'xChannelSelector', 'yChannelSelector', 'result'],
+    [],
+    [],
+    '<feDisplacementMap in="SourceGraphic" in2="SourceGraphic" scale="10" xChannelSelector="R" yChannelSelector="G" result="displacement"/>',
+  ),
+  feElement(
+    'feDropShadow',
+    ['dx', 'dy', 'stdDeviation', 'flood-color', 'flood-opacity', 'in', 'result'],
+    [],
+    [],
+    '<feDropShadow dx="2" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.5" in="SourceGraphic" result="dropShadow"/>',
+  ),
+  feElement(
+    'feFlood',
+    ['flood-color', 'flood-opacity', 'result'],
+    [],
+    [],
+    '<feFlood flood-color="#3b82f6" flood-opacity="1" result="flood"/>',
+  ),
+  feElement(
+    'feGaussianBlur',
+    ['in', 'stdDeviation', 'edgeMode', 'result'],
+    [],
+    [],
+    '<feGaussianBlur in="SourceGraphic" stdDeviation="3" edgeMode="none" result="blur"/>',
+  ),
+  feElement(
+    'feImage',
+    ['href', 'preserveAspectRatio', 'result'],
+    ['crossorigin'],
+    [],
+    '<feImage href="" preserveAspectRatio="xMidYMid meet" result="image"/>',
+  ),
+  feElement('feMerge', ['result'], [], ['feMergeNode'], '<feMerge result="merge"><feMergeNode in="SourceGraphic"/></feMerge>'),
+  feElement('feMergeNode', ['in'], [], [], '<feMergeNode in="SourceGraphic"/>'),
+  feElement(
+    'feMorphology',
+    ['in', 'operator', 'radius', 'result'],
+    [],
+    [],
+    '<feMorphology in="SourceAlpha" operator="dilate" radius="2" result="morphology"/>',
+  ),
+  feElement(
+    'feOffset',
+    ['in', 'dx', 'dy', 'result'],
+    [],
+    [],
+    '<feOffset in="SourceGraphic" dx="5" dy="5" result="offset"/>',
+  ),
+  feElement(
+    'feSpecularLighting',
+    ['in', 'surfaceScale', 'specularConstant', 'specularExponent', 'lighting-color', 'result'],
+    [],
+    [...FE_LIGHT_CHILDREN],
+    '<feSpecularLighting in="SourceAlpha" surfaceScale="1" specularConstant="1" specularExponent="20" lighting-color="#ffffff" result="specular"><fePointLight x="50" y="50" z="200"/></feSpecularLighting>',
+  ),
+  feElement('feTile', ['in', 'result'], [], [], '<feTile in="SourceGraphic" result="tile"/>'),
+  feElement(
+    'feTurbulence',
+    ['baseFrequency', 'numOctaves', 'seed', 'stitchTiles', 'type', 'result'],
+    [],
+    [],
+    '<feTurbulence baseFrequency="0.05" numOctaves="2" seed="0" stitchTiles="noStitch" type="fractalNoise" result="turbulence"/>',
+  ),
+  feElement(
+    'feFuncR',
+    ['type', 'tableValues', 'slope', 'intercept', 'amplitude', 'exponent', 'offset'],
+    [],
+    [],
+    '<feFuncR type="identity"/>',
+  ),
+  feElement(
+    'feFuncG',
+    ['type', 'tableValues', 'slope', 'intercept', 'amplitude', 'exponent', 'offset'],
+    [],
+    [],
+    '<feFuncG type="identity"/>',
+  ),
+  feElement(
+    'feFuncB',
+    ['type', 'tableValues', 'slope', 'intercept', 'amplitude', 'exponent', 'offset'],
+    [],
+    [],
+    '<feFuncB type="identity"/>',
+  ),
+  feElement(
+    'feFuncA',
+    ['type', 'tableValues', 'slope', 'intercept', 'amplitude', 'exponent', 'offset'],
+    [],
+    [],
+    '<feFuncA type="identity"/>',
+  ),
+  feElement(
+    'feDistantLight',
+    ['azimuth', 'elevation'],
+    [],
+    [],
+    '<feDistantLight azimuth="45" elevation="45"/>',
+  ),
+  feElement('fePointLight', ['x', 'y', 'z'], [], [], '<fePointLight x="50" y="50" z="200"/>'),
+  feElement(
+    'feSpotLight',
+    ['x', 'y', 'z', 'pointsAtX', 'pointsAtY', 'pointsAtZ', 'specularExponent', 'limitingConeAngle'],
+    [],
+    [],
+    '<feSpotLight x="50" y="50" z="200" pointsAtX="50" pointsAtY="50" pointsAtZ="0" specularExponent="20"/>',
+  ),
 ]
 
 export function normalizeTagName(raw: string): string {
@@ -331,6 +540,46 @@ const DEFAULT_ATTR_VALUES: Record<string, string> = {
   'stop-color': '#3b82f6',
   'font-size': '16',
   'text-anchor': 'middle',
+  in: 'SourceGraphic',
+  in2: 'BackgroundImage',
+  result: 'result',
+  mode: 'normal',
+  operator: 'over',
+  type: 'identity',
+  stdDeviation: '3',
+  'flood-color': '#3b82f6',
+  'flood-opacity': '1',
+  'lighting-color': '#ffffff',
+  baseFrequency: '0.05',
+  numOctaves: '2',
+  seed: '0',
+  stitchTiles: 'noStitch',
+  edgeMode: 'none',
+  scale: '10',
+  xChannelSelector: 'R',
+  yChannelSelector: 'G',
+  filterUnits: 'objectBoundingBox',
+  primitiveUnits: 'userSpaceOnUse',
+  surfaceScale: '1',
+  diffuseConstant: '1',
+  specularConstant: '1',
+  specularExponent: '20',
+  preserveAspectRatio: 'xMidYMid meet',
+  values:
+    '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0',
+  order: '3',
+  kernelMatrix: '0 0 0  0 1 0  0 0 0',
+  radius: '2',
+  azimuth: '45',
+  elevation: '45',
+  z: '200',
+  pointsAtX: '50',
+  pointsAtY: '50',
+  pointsAtZ: '0',
+  slope: '1',
+  intercept: '0',
+  amplitude: '1',
+  exponent: '1',
 }
 
 export function getElementSchema(tagName: string): SvgElementSchema | null {

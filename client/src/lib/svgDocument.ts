@@ -75,7 +75,7 @@ function parseAttributes(openTagSource: string): Record<string, string> {
   while ((match = pattern.exec(openTagSource))) {
     const name = match[1]
     if (name === '/' || name.startsWith('?')) continue
-    const value = match[2] ?? match[3] ?? match[4] ?? ''
+    const value = match[3] ?? match[4] ?? match[5] ?? ''
     attrs[name] = value
   }
   return attrs

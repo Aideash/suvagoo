@@ -1,7 +1,21 @@
 import { parseViewBoxFromContent, type ViewBox } from './svgSchema'
 
 export type AttributeKind =
-  'color' | 'number' | 'length' | 'opacity' | 'percentage' | 'enum' | 'points' | 'text'
+  | 'color'
+  | 'number'
+  | 'length'
+  | 'opacity'
+  | 'percentage'
+  | 'enum'
+  | 'points'
+  | 'path'
+  | 'dual-number'
+  | 'text'
+
+export interface DualNumberLabels {
+  primary: string
+  secondary: string
+}
 
 export interface AttributeSchema {
   kind: AttributeKind
@@ -9,6 +23,7 @@ export interface AttributeSchema {
   min?: number
   max?: number
   step?: number
+  dualNumber?: DualNumberLabels
 }
 
 const COLOR_ATTRS = new Set([
@@ -53,6 +68,43 @@ const LENGTH_ATTRS = new Set([
   'textLength',
   'pathLength',
   'rotate',
+  'z',
+  'pointsatx',
+  'pointsaty',
+  'pointsatz',
+  'radius',
+  'targetx',
+  'targety',
+  'limitingconeangle',
+])
+
+const DUAL_NUMBER_ATTRS = new Set(['stddeviation', 'basefrequency'])
+
+const DUAL_NUMBER_LABELS: Record<string, DualNumberLabels> = {
+  stddeviation: { primary: 'X', secondary: 'Y' },
+  basefrequency: { primary: 'X', secondary: 'Y' },
+}
+
+const NUMBER_ATTRS = new Set([
+  'seed',
+  'numoctaves',
+  'scale',
+  'surfacescale',
+  'diffuseconstant',
+  'specularconstant',
+  'specularexponent',
+  'elevation',
+  'azimuth',
+  'k1',
+  'k2',
+  'k3',
+  'k4',
+  'bias',
+  'divisor',
+  'amplitude',
+  'exponent',
+  'slope',
+  'intercept',
 ])
 
 const ENUM_ATTRS: Record<string, readonly string[]> = {
@@ -91,6 +143,30 @@ const ENUM_ATTRS: Record<string, readonly string[]> = {
   maskUnits: ['objectBoundingBox', 'userSpaceOnUse'],
   maskContentUnits: ['objectBoundingBox', 'userSpaceOnUse'],
   clipPathUnits: ['objectBoundingBox', 'userSpaceOnUse'],
+  filterUnits: ['objectBoundingBox', 'userSpaceOnUse'],
+  primitiveUnits: ['objectBoundingBox', 'userSpaceOnUse'],
+  mode: [
+    'normal',
+    'multiply',
+    'screen',
+    'overlay',
+    'darken',
+    'lighten',
+    'color-dodge',
+    'color-burn',
+    'hard-light',
+    'soft-light',
+    'difference',
+    'exclusion',
+    'hue',
+    'saturation',
+    'color',
+    'luminosity',
+  ],
+  edgeMode: ['duplicate', 'wrap', 'none'],
+  stitchTiles: ['stitch', 'noStitch'],
+  xChannelSelector: ['R', 'G', 'B', 'A'],
+  yChannelSelector: ['R', 'G', 'B', 'A'],
   lengthAdjust: ['spacing', 'spacingAndGlyphs'],
   method: ['align', 'stretch'],
   spacing: ['auto', 'exact'],
@@ -116,6 +192,13 @@ export function formatNumericValue(number: number, unit: string): string {
   return `${text}${unit}`
 }
 
+function enumSchemaFor(name: string): AttributeSchema | null {
+  const normalized = name.toLowerCase()
+  const key = Object.keys(ENUM_ATTRS).find((candidate) => candidate.toLowerCase() === normalized)
+  if (!key) return null
+  return { kind: 'enum', enumValues: ENUM_ATTRS[key] }
+}
+
 export function getAttributeSchema(name: string): AttributeSchema {
   const normalized = name.toLowerCase()
 
@@ -125,8 +208,9 @@ export function getAttributeSchema(name: string): AttributeSchema {
   if (OPACITY_ATTRS.has(normalized)) {
     return { kind: 'opacity', min: 0, max: 1, step: 0.05 }
   }
-  if (ENUM_ATTRS[normalized]) {
-    return { kind: 'enum', enumValues: ENUM_ATTRS[normalized] }
+  const enumSchema = enumSchemaFor(name)
+  if (enumSchema) {
+    return enumSchema
   }
   if (PERCENTAGE_ATTRS.has(normalized)) {
     return { kind: 'percentage', min: 0, max: 100, step: 1 }
@@ -134,8 +218,22 @@ export function getAttributeSchema(name: string): AttributeSchema {
   if (LENGTH_ATTRS.has(normalized)) {
     return { kind: 'length', step: 1 }
   }
+  if (NUMBER_ATTRS.has(normalized)) {
+    return { kind: 'number', step: 1 }
+  }
+  if (DUAL_NUMBER_ATTRS.has(normalized)) {
+    return {
+      kind: 'dual-number',
+      min: 0,
+      step: normalized === 'basefrequency' ? 0.01 : 0.5,
+      dualNumber: DUAL_NUMBER_LABELS[normalized],
+    }
+  }
   if (normalized === 'points') {
     return { kind: 'points' }
+  }
+  if (normalized === 'd') {
+    return { kind: 'path' }
   }
 
   return { kind: 'text' }
@@ -163,8 +261,9 @@ export function numericRangeForAttribute(
 
   const { width, height } = viewBox
   const span = Math.max(width, height, 1)
+  const attr = name.toLowerCase()
 
-  switch (name) {
+  switch (attr) {
     case 'width':
     case 'rx':
       return { min: 0, max: width * 2, step: baseStep }
@@ -191,6 +290,25 @@ export function numericRangeForAttribute(
     case 'dx':
     case 'dy':
       return { min: -span, max: span, step: baseStep }
+    case 'z':
+    case 'pointsatx':
+    case 'pointsaty':
+    case 'pointsatz':
+    case 'targetx':
+    case 'targety':
+    case 'radius':
+    case 'limitingconeangle':
+      return { min: -span, max: span * 2, step: baseStep }
+    case 'scale':
+    case 'seed':
+    case 'numoctaves':
+    case 'surfacescale':
+    case 'diffuseconstant':
+    case 'specularconstant':
+    case 'specularexponent':
+    case 'elevation':
+    case 'azimuth':
+      return { min: 0, max: span, step: baseStep }
     default:
       if (parsed) {
         const magnitude = Math.max(Math.abs(parsed.number), 1)
@@ -340,6 +458,22 @@ export function parseColorToHex(value: string): string | null {
 
 export function parseColorAlpha(value: string): number {
   return parseColor(value)?.a ?? 1
+}
+
+export function dualNumericRangeForAttribute(
+  name: string,
+  viewBox: ViewBox,
+): { min: number; max: number; step: number } {
+  const schema = getAttributeSchema(name)
+  const normalized = name.toLowerCase()
+  const span = Math.max(viewBox.width, viewBox.height, 1)
+  const step = schema.step ?? (normalized === 'basefrequency' ? 0.01 : 0.5)
+
+  if (normalized === 'basefrequency') {
+    return { min: 0, max: 1, step }
+  }
+
+  return { min: 0, max: span / 2, step }
 }
 
 export function viewBoxFromContent(content: string): ViewBox {

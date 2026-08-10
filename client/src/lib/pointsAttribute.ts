@@ -31,11 +31,7 @@ export function formatPoints(points: Point2D[]): string {
   return points.map((p) => `${formatCoord(p.x)},${formatCoord(p.y)}`).join(' ')
 }
 
-export function updatePoint(
-  points: Point2D[],
-  index: number,
-  patch: Partial<Point2D>,
-): Point2D[] {
+export function updatePoint(points: Point2D[], index: number, patch: Partial<Point2D>): Point2D[] {
   if (index < 0 || index >= points.length) return points
   const next = [...points]
   next[index] = { ...next[index], ...patch }

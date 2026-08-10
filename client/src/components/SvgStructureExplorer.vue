@@ -37,6 +37,8 @@ const emit = defineEmits<{
     state: {
       attribute: AttributeContext | null
       selectedPointIndex: number | null
+      selectedCommandIndex: number | null
+      selectedPathHandleIndex: number | null
     },
   ]
 }>()
@@ -45,58 +47,16 @@ const filter = ref('')
 const deleteMode = ref(false)
 const showAllAttributes = ref(false)
 const showAllChildren = ref(false)
-const pinnedAttribute = ref<AttributeContext | null>(null)
 const selectedPointIndex = ref<number | null>(null)
+const selectedCommandIndex = ref<number | null>(null)
+const selectedPathHandleIndex = ref<number | null>(null)
 
 const needle = computed(() => filter.value.trim().toLowerCase())
 const parsable = computed(() => isXmlParsable(props.content))
 const indexedDocument = computed(() => parseIndexedDocument(props.content))
 const context = computed(() => findElementAtOffset(props.content, props.cursorOffset))
-const attributeAtCursor = computed(() => findAttributeAtOffset(props.content, props.cursorOffset))
-const activeAttribute = computed(() => {
-  if (attributeAtCursor.value) return attributeAtCursor.value
-  if (
-    pinnedAttribute.value &&
-    context.value &&
-    pathsEqual(pinnedAttribute.value.path, context.value.path)
-  ) {
-    const current = context.value.existingAttributes[pinnedAttribute.value.attrName]
-    if (current !== undefined) {
-      return { ...pinnedAttribute.value, value: current }
-    }
-  }
-  return null
-})
+const activeAttribute = computed(() => findAttributeAtOffset(props.content, props.cursorOffset))
 
-watch(attributeAtCursor, (next) => {
-  if (!next) return
-  if (
-    pinnedAttribute.value &&
-    attributeIdentity(pinnedAttribute.value) === attributeIdentity(next)
-  ) {
-    pinnedAttribute.value = {
-      ...pinnedAttribute.value,
-      value: next.value,
-      valueStart: next.valueStart,
-      valueEnd: next.valueEnd,
-    }
-    return
-  }
-  pinnedAttribute.value = next
-})
-
-watch(
-  () => props.content,
-  () => {
-    if (!pinnedAttribute.value || !context.value) return
-    const current = context.value.existingAttributes[pinnedAttribute.value.attrName]
-    if (current === undefined) {
-      pinnedAttribute.value = null
-      return
-    }
-    pinnedAttribute.value = { ...pinnedAttribute.value, value: current }
-  },
-)
 const schema = computed(() => (context.value ? getElementSchema(context.value.tagName) : null))
 const selectedNode = computed(() => {
   if (!indexedDocument.value || !context.value) return null
@@ -226,25 +186,10 @@ const flatTree = computed(() => {
 })
 
 function onTreeClick(path: PathSegment[]) {
-  pinnedAttribute.value = null
   emit('selectElement', path)
 }
 
 function onAttributeChipClick(name: string) {
-  if (context.value && context.value.existingAttributes[name] !== undefined) {
-    pinnedAttribute.value = {
-      path: context.value.path,
-      tagName: context.value.tagName,
-      attrName: name,
-      value: context.value.existingAttributes[name],
-      valueStart: 0,
-      valueEnd: 0,
-      quoted: true,
-      quoteChar: '"',
-    }
-  } else {
-    pinnedAttribute.value = null
-  }
   emit('insertAttribute', name)
 }
 
@@ -252,15 +197,23 @@ watch(activeAttribute, (attr) => {
   if (attr?.attrName !== 'points') {
     selectedPointIndex.value = null
   }
+  if (attr?.attrName !== 'd') {
+    selectedCommandIndex.value = null
+    selectedPathHandleIndex.value = null
+  }
   emitPreviewState()
 })
 
 watch(selectedPointIndex, () => emitPreviewState())
+watch(selectedCommandIndex, () => emitPreviewState())
+watch(selectedPathHandleIndex, () => emitPreviewState())
 
 function emitPreviewState() {
   emit('previewStateChange', {
     attribute: activeAttribute.value,
     selectedPointIndex: selectedPointIndex.value,
+    selectedCommandIndex: selectedCommandIndex.value,
+    selectedPathHandleIndex: selectedPathHandleIndex.value,
   })
 }
 
@@ -268,12 +221,30 @@ function onSelectPoint(index: number | null) {
   selectedPointIndex.value = index
 }
 
+function onSelectCommand(index: number | null) {
+  selectedCommandIndex.value = index
+  selectedPathHandleIndex.value = null
+}
+
 function setSelectedPointIndex(index: number | null) {
   selectedPointIndex.value = index
   emitPreviewState()
 }
 
-defineExpose({ setSelectedPointIndex })
+function setSelectedCommandIndex(index: number | null) {
+  selectedCommandIndex.value = index
+  emitPreviewState()
+}
+
+function setSelectedPathHandleIndex(index: number | null) {
+  selectedPathHandleIndex.value = index
+  if (index != null) {
+    // keep command index in sync when selecting from preview
+  }
+  emitPreviewState()
+}
+
+defineExpose({ setSelectedPointIndex, setSelectedCommandIndex, setSelectedPathHandleIndex })
 
 onMounted(() => emitPreviewState())
 
@@ -484,9 +455,11 @@ function onAttributeUpdate(value: string) {
         :attribute="activeAttribute"
         :content="content"
         :focus-point-index="selectedPointIndex"
+        :focus-command-index="selectedCommandIndex"
         class="svg-explorer__section"
         @update="onAttributeUpdate"
         @select-point="onSelectPoint"
+        @select-command="onSelectCommand"
       />
     </div>
   </div>

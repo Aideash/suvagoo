@@ -18,6 +18,7 @@ import {
   type PathSegment,
 } from '../lib/svgDocument'
 import { parsePoints } from '../lib/pointsAttribute'
+import { parsePathD } from '../lib/pathAttribute'
 
 const route = useRoute()
 const router = useRouter()
@@ -38,9 +39,13 @@ const explorerOpen = ref(true)
 const previewState = ref<{
   attribute: AttributeContext | null
   selectedPointIndex: number | null
+  selectedCommandIndex: number | null
+  selectedPathHandleIndex: number | null
 }>({
   attribute: null,
   selectedPointIndex: null,
+  selectedCommandIndex: null,
+  selectedPathHandleIndex: null,
 })
 
 const pointsEdit = computed(() => {
@@ -52,6 +57,19 @@ const pointsEdit = computed(() => {
     path: attr.path,
     points,
     selectedIndex: previewState.value.selectedPointIndex,
+  }
+})
+
+const pathEdit = computed(() => {
+  const attr = previewState.value.attribute
+  if (!attr || attr.attrName !== 'd') return null
+  const commands = parsePathD(attr.value)
+  if (!commands) return null
+  return {
+    path: attr.path,
+    commands,
+    selectedCommandIndex: previewState.value.selectedCommandIndex,
+    selectedHandleIndex: previewState.value.selectedPathHandleIndex,
   }
 })
 
@@ -191,6 +209,8 @@ function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
 function onPreviewStateChange(state: {
   attribute: AttributeContext | null
   selectedPointIndex: number | null
+  selectedCommandIndex: number | null
+  selectedPathHandleIndex: number | null
 }) {
   previewState.value = state
 }
@@ -199,7 +219,18 @@ function onPreviewSelectPoint(index: number) {
   explorerRef.value?.setSelectedPointIndex(index)
 }
 
+function onPreviewSelectPathHandle(handleIndex: number, commandIndex: number) {
+  explorerRef.value?.setSelectedCommandIndex(commandIndex)
+  explorerRef.value?.setSelectedPathHandleIndex(handleIndex)
+}
+
 function onPreviewUpdatePoints(value: string) {
+  const attr = previewState.value.attribute
+  if (!attr) return
+  onUpdateAttribute(attr.path, attr.attrName, value)
+}
+
+function onPreviewUpdatePath(value: string) {
   const attr = previewState.value.attribute
   if (!attr) return
   onUpdateAttribute(attr.path, attr.attrName, value)
@@ -282,9 +313,12 @@ function onPreviewUpdatePoints(value: string) {
           <SvgPreview
             :content="content"
             :points-edit="pointsEdit"
+            :path-edit="pathEdit"
             show-axes
             @select-point="onPreviewSelectPoint"
             @update-points="onPreviewUpdatePoints"
+            @select-path-handle="onPreviewSelectPathHandle"
+            @update-path="onPreviewUpdatePath"
           />
         </section>
       </div>

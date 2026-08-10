@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import {
-  numericRangeForAttribute,
-  parseNumericValue,
-  viewBoxFromContent,
-} from '../lib/attributeSchema'
+import { numericRangeForAttribute, viewBoxFromContent } from '../lib/attributeSchema'
 import {
   formatPointLabel,
   formatPoints,
@@ -16,6 +12,7 @@ import {
   type Point2D,
 } from '../lib/pointsAttribute'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
+import AxisControl from './AxisControl.vue'
 
 const props = defineProps<{
   attribute: AttributeContext
@@ -31,18 +28,6 @@ const emit = defineEmits<{
 const textDraft = ref(props.attribute.value)
 const isEditingText = ref(false)
 const selectedIndex = ref<number | null>(null)
-
-const xRangeMin = ref(0)
-const xRangeMax = ref(100)
-const xRangeStep = ref(1)
-const yRangeMin = ref(0)
-const yRangeMax = ref(100)
-const yRangeStep = ref(1)
-
-const xTextDraft = ref('')
-const yTextDraft = ref('')
-const isEditingXText = ref(false)
-const isEditingYText = ref(false)
 
 const viewBox = computed(() => viewBoxFromContent(props.content))
 
@@ -79,42 +64,11 @@ const defaultYRange = computed(() =>
   ),
 )
 
-const effectiveXRange = computed(() => normalizeRange(xRangeMin.value, xRangeMax.value, xRangeStep.value, defaultXRange.value))
-const effectiveYRange = computed(() => normalizeRange(yRangeMin.value, yRangeMax.value, yRangeStep.value, defaultYRange.value))
-
-function normalizeRange(
-  min: number,
-  max: number,
-  step: number,
-  defaults: { min: number; max: number; step: number },
-) {
-  let lo = Number.isFinite(min) ? min : defaults.min
-  let hi = Number.isFinite(max) ? max : defaults.max
-  let st = Number.isFinite(step) && step > 0 ? step : defaults.step
-  if (lo > hi) [lo, hi] = [hi, lo]
-  return { min: lo, max: hi, step: st }
-}
-
-function syncAxisRanges() {
-  const xDefaults = defaultXRange.value
-  xRangeMin.value = xDefaults.min
-  xRangeMax.value = xDefaults.max
-  xRangeStep.value = xDefaults.step
-  const yDefaults = defaultYRange.value
-  yRangeMin.value = yDefaults.min
-  yRangeMax.value = yDefaults.max
-  yRangeStep.value = yDefaults.step
-}
-
 watch(
   () => props.attribute.value,
   (value) => {
     if (!isEditingText.value) {
       textDraft.value = value
-    }
-    if (selectedPoint.value) {
-      if (!isEditingXText.value) xTextDraft.value = String(selectedPoint.value.x)
-      if (!isEditingYText.value) yTextDraft.value = String(selectedPoint.value.y)
     }
   },
 )
@@ -124,22 +78,12 @@ watch(
   (identity, previous) => {
     if (previous !== undefined && identity === previous) return
     isEditingText.value = false
-    isEditingXText.value = false
-    isEditingYText.value = false
     textDraft.value = props.attribute.value
     selectedIndex.value = null
     emit('selectPoint', null)
-    syncAxisRanges()
   },
   { immediate: true },
 )
-
-watch(selectedPoint, (point) => {
-  if (!point) return
-  if (!isEditingXText.value) xTextDraft.value = String(point.x)
-  if (!isEditingYText.value) yTextDraft.value = String(point.y)
-  syncAxisRanges()
-})
 
 watch(
   () => props.focusPointIndex,
@@ -204,70 +148,12 @@ function onTextBlur(event: FocusEvent) {
 function updateSelectedAxis(axis: 'x' | 'y', number: number) {
   const points = parsedPoints.value
   if (!points || selectedIndex.value == null) return
-  const next = updatePoint(points, selectedIndex.value, axis === 'x' ? { x: number } : { y: number })
+  const next = updatePoint(
+    points,
+    selectedIndex.value,
+    axis === 'x' ? { x: number } : { y: number },
+  )
   commitPoints(next)
-}
-
-const xSlider = computed({
-  get() {
-    const fromDraft = parseNumericValue(xTextDraft.value)
-    const n = fromDraft?.number ?? selectedPoint.value?.x ?? effectiveXRange.value.min
-    return Math.min(effectiveXRange.value.max, Math.max(effectiveXRange.value.min, n))
-  },
-  set(next: number) {
-    updateSelectedAxis('x', next)
-  },
-})
-
-const ySlider = computed({
-  get() {
-    const fromDraft = parseNumericValue(yTextDraft.value)
-    const n = fromDraft?.number ?? selectedPoint.value?.y ?? effectiveYRange.value.min
-    return Math.min(effectiveYRange.value.max, Math.max(effectiveYRange.value.min, n))
-  },
-  set(next: number) {
-    updateSelectedAxis('y', next)
-  },
-})
-
-function onAxisTextInput(axis: 'x' | 'y', event: Event) {
-  const value = (event.target as HTMLInputElement).value
-  if (axis === 'x') {
-    isEditingXText.value = true
-    xTextDraft.value = value
-  } else {
-    isEditingYText.value = true
-    yTextDraft.value = value
-  }
-}
-
-function onAxisTextEnter(axis: 'x' | 'y', event: KeyboardEvent) {
-  const value = (event.target as HTMLInputElement).value
-  if (axis === 'x') isEditingXText.value = false
-  else isEditingYText.value = false
-  const parsed = parseNumericValue(value)
-  if (parsed) updateSelectedAxis(axis, parsed.number)
-}
-
-function onAxisTextBlur(axis: 'x' | 'y', event: FocusEvent) {
-  if (axis === 'x') isEditingXText.value = false
-  else isEditingYText.value = false
-  const point = selectedPoint.value
-  if (point) {
-    const value = axis === 'x' ? String(point.x) : String(point.y)
-    if (axis === 'x') xTextDraft.value = value
-    else yTextDraft.value = value
-    ;(event.target as HTMLInputElement).value = value
-  }
-}
-
-function nudgeAxis(axis: 'x' | 'y', delta: number) {
-  const range = axis === 'x' ? effectiveXRange.value : effectiveYRange.value
-  const draft = axis === 'x' ? xTextDraft.value : yTextDraft.value
-  const parsed = parseNumericValue(draft)
-  const current = parsed?.number ?? (axis === 'x' ? selectedPoint.value?.x : selectedPoint.value?.y)
-  if (current == null) return
-  updateSelectedAxis(axis, current + delta * range.step)
 }
 
 function addPoint() {
@@ -322,7 +208,9 @@ function moveSelected(delta: -1 | 1) {
       @blur="onTextBlur"
     />
 
-    <p v-if="parseError" class="points-adjuster__warn">Could not parse coordinates — check the format.</p>
+    <p v-if="parseError" class="points-adjuster__warn">
+      Could not parse coordinates — check the format.
+    </p>
 
     <template v-else-if="parsedPoints && parsedPoints.length > 0">
       <div class="points-adjuster__chips" role="listbox" aria-label="Point coordinates">
@@ -375,101 +263,24 @@ function moveSelected(delta: -1 | 1) {
       </div>
 
       <template v-if="selectedPoint">
-        <div class="points-adjuster__axis">
-          <span class="points-adjuster__axis-label">X</span>
-          <input
-            v-model.number="xSlider"
-            type="range"
-            class="points-adjuster__slider"
-            :min="effectiveXRange.min"
-            :max="effectiveXRange.max"
-            :step="effectiveXRange.step"
-          />
-          <div class="points-adjuster__stepper">
-            <button type="button" class="points-adjuster__step-btn" @click="nudgeAxis('x', -1)">
-              −
-            </button>
-            <input
-              :value="xTextDraft"
-              type="text"
-              class="input points-adjuster__number"
-              @input="onAxisTextInput('x', $event)"
-              @keydown.enter="onAxisTextEnter('x', $event)"
-              @blur="onAxisTextBlur('x', $event)"
-            />
-            <button type="button" class="points-adjuster__step-btn" @click="nudgeAxis('x', 1)">
-              +
-            </button>
-          </div>
-          <div class="points-adjuster__range-fields">
-            <label class="points-adjuster__range-field">
-              <span>min</span>
-              <input v-model.number="xRangeMin" type="number" class="input points-adjuster__range-input" step="any" />
-            </label>
-            <label class="points-adjuster__range-field">
-              <span>max</span>
-              <input v-model.number="xRangeMax" type="number" class="input points-adjuster__range-input" step="any" />
-            </label>
-            <label class="points-adjuster__range-field">
-              <span>step</span>
-              <input
-                v-model.number="xRangeStep"
-                type="number"
-                class="input points-adjuster__range-input"
-                min="0"
-                step="any"
-              />
-            </label>
-          </div>
-        </div>
-
-        <div class="points-adjuster__axis">
-          <span class="points-adjuster__axis-label">Y</span>
-          <input
-            v-model.number="ySlider"
-            type="range"
-            class="points-adjuster__slider"
-            :min="effectiveYRange.min"
-            :max="effectiveYRange.max"
-            :step="effectiveYRange.step"
-          />
-          <div class="points-adjuster__stepper">
-            <button type="button" class="points-adjuster__step-btn" @click="nudgeAxis('y', -1)">
-              −
-            </button>
-            <input
-              :value="yTextDraft"
-              type="text"
-              class="input points-adjuster__number"
-              @input="onAxisTextInput('y', $event)"
-              @keydown.enter="onAxisTextEnter('y', $event)"
-              @blur="onAxisTextBlur('y', $event)"
-            />
-            <button type="button" class="points-adjuster__step-btn" @click="nudgeAxis('y', 1)">
-              +
-            </button>
-          </div>
-          <div class="points-adjuster__range-fields">
-            <label class="points-adjuster__range-field">
-              <span>min</span>
-              <input v-model.number="yRangeMin" type="number" class="input points-adjuster__range-input" step="any" />
-            </label>
-            <label class="points-adjuster__range-field">
-              <span>max</span>
-              <input v-model.number="yRangeMax" type="number" class="input points-adjuster__range-input" step="any" />
-            </label>
-            <label class="points-adjuster__range-field">
-              <span>step</span>
-              <input
-                v-model.number="yRangeStep"
-                type="number"
-                class="input points-adjuster__range-input"
-                min="0"
-                step="any"
-              />
-            </label>
-          </div>
-        </div>
+        <AxisControl
+          label="X"
+          axis="x"
+          :value="selectedPoint.x"
+          :default-min="defaultXRange.min"
+          :default-max="defaultXRange.max"
+          :default-step="defaultXRange.step"
+          @update="updateSelectedAxis('x', $event)"
+        />
+        <AxisControl
+          label="Y"
+          axis="y"
+          :value="selectedPoint.y"
+          :default-min="defaultYRange.min"
+          :default-max="defaultYRange.max"
+          :default-step="defaultYRange.step"
+          @update="updateSelectedAxis('y', $event)"
+        />
       </template>
     </template>
   </div>
@@ -569,87 +380,6 @@ function moveSelected(delta: -1 | 1) {
       opacity: 0.35;
       cursor: not-allowed;
     }
-  }
-
-  &__axis {
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-xs;
-    padding-top: $spacing-xs;
-    border-top: 1px solid $color-border;
-  }
-
-  &__axis-label {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: $color-text-muted;
-  }
-
-  &__slider {
-    width: 100%;
-    accent-color: $color-accent;
-  }
-
-  &__stepper {
-    display: flex;
-    align-items: center;
-    gap: $spacing-xs;
-  }
-
-  &__step-btn {
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border: 1px solid $color-border;
-    border-radius: $radius-sm;
-    background: $color-bg;
-    color: $color-text;
-    font-size: 1rem;
-    line-height: 1;
-    cursor: pointer;
-    transition:
-      border-color 0.12s,
-      color 0.12s;
-
-    &:hover {
-      border-color: $color-accent;
-      color: $color-accent;
-    }
-  }
-
-  &__number {
-    flex: 1;
-    min-width: 0;
-    font-family: $font-mono;
-    font-size: 0.8125rem;
-    text-align: center;
-  }
-
-  &__range-fields {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: $spacing-xs;
-  }
-
-  &__range-field {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 20px;
-    font-size: 0.625rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: $color-text-muted;
-  }
-
-  &__range-input {
-    font-family: $font-mono;
-    font-size: 0.75rem;
-    padding: 2px $spacing-xs;
   }
 }
 </style>
