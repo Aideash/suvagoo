@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import DOMPurify from 'dompurify'
 import { formatPoints, updatePoint, type Point2D } from '../lib/pointsAttribute'
 import {
@@ -24,6 +24,10 @@ export interface PathEditState {
   commands: PathCommand[]
   selectedCommandIndex: number | null
   selectedHandleIndex: number | null
+}
+
+interface KeyedPoint extends Point2D {
+  key: string
 }
 
 const props = withDefaults(
@@ -88,7 +92,23 @@ function formatCoord(value: number): string {
 const contentRef = ref<HTMLElement | null>(null)
 const overlayRef = ref<SVGSVGElement | null>(null)
 const cursorCoords = ref<{ x: number; y: number } | null>(null)
+const paddingTransitionEnabled = ref(true)
+const clickedPointsPaddingCollapsed = ref(false)
+const coordsShiftAnimating = ref(false)
+const overflowLeaveActive = ref(false)
+const clickedPointsListRef = ref<{ $el: HTMLElement } | null>(null)
+const clickedPointsListMinHeight = ref('')
+
+function clickedPointsListEl(): HTMLElement | null {
+  return clickedPointsListRef.value?.$el ?? null
+}
 const draggingIndex = ref<number | null>(null)
+const clickedPoints = ref<KeyedPoint[]>([])
+const MAX_CLICKED_POINTS = 5
+
+function listRowGap(parent: HTMLElement): number {
+  return parseFloat(getComputedStyle(parent).rowGap) || 0
+}
 
 const overlayViewBox = computed(() => {
   const { minX, minY, width, height } = viewBox.value
@@ -170,7 +190,7 @@ function getCommandEndPoint(commands: PathCommand[], beforeIndex: number): Point
 
 const draggingHandleIndex = ref<number | null>(null)
 
-function clientToSvgCoords(clientX: number, clientY: number): { x: number; y: number } | null {
+function clientToSvgCoords(clientX: number, clientY: number): Point2D | null {
   const svg = overlayRef.value ?? contentRef.value?.querySelector('svg')
   if (!svg) return null
   return clientToSvg(svg as SVGSVGElement, clientX, clientY)
@@ -259,11 +279,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointercancel', onHandlePointerUp)
 })
 
-function clientToSvg(
-  svg: SVGSVGElement,
-  clientX: number,
-  clientY: number,
-): { x: number; y: number } | null {
+function clientToSvg(svg: SVGSVGElement, clientX: number, clientY: number): Point2D | null {
   const ctm = svg.getScreenCTM()
   if (!ctm) return null
   const point = svg.createSVGPoint()
@@ -331,6 +347,64 @@ function toggleFullscreen() {
     document.exitFullscreen()
   }
 }
+
+async function addClickedPoint() {
+  const currentCoords = cursorCoords.value
+  if (!currentCoords) return
+
+  coordsShiftAnimating.value = true
+  paddingTransitionEnabled.value = false
+  clickedPointsPaddingCollapsed.value = true
+  await nextTick()
+
+  clickedPoints.value.unshift({ ...currentCoords, key: crypto.randomUUID() })
+  if (clickedPoints.value.length > MAX_CLICKED_POINTS) {
+    clickedPoints.value.pop()
+    overflowLeaveActive.value = true
+  }
+
+  await nextTick()
+  paddingTransitionEnabled.value = true
+  await nextTick()
+  requestAnimationFrame(() => {
+    clickedPointsPaddingCollapsed.value = false
+  })
+}
+
+function onClickedPointsPaddingTransitionEnd(event: TransitionEvent) {
+  if (event.propertyName !== 'padding-top') return
+  coordsShiftAnimating.value = false
+}
+
+function onClickedPointAfterLeave() {
+  overflowLeaveActive.value = false
+  clickedPointsListMinHeight.value = ''
+}
+
+function onClickedPointBeforeLeave(el: Element) {
+  const node = el as HTMLElement
+  const list = clickedPointsListEl()
+  if (overflowLeaveActive.value && list) {
+    clickedPointsListMinHeight.value = `${list.offsetHeight}px`
+    const gap = listRowGap(list)
+    node.style.top = 'auto'
+    node.style.bottom = `${-(node.offsetHeight + gap)}px`
+    node.style.width = `${node.offsetWidth}px`
+    return
+  }
+  node.style.top = `${node.offsetTop}px`
+  node.style.bottom = 'auto'
+  node.style.width = `${node.offsetWidth}px`
+}
+
+function removeClickedPoint(index = -1) {
+  if (clickedPoints.value.length === 0) return
+  if (index === -1) {
+    clickedPoints.value.shift()
+  } else {
+    clickedPoints.value.splice(index, 1)
+  }
+}
 </script>
 
 <template>
@@ -345,8 +419,51 @@ function toggleFullscreen() {
           <span class="material-icons">{{ fullscreen ? 'fullscreen_exit' : 'fullscreen' }}</span>
         </button>
 
-        <div v-if="cursorCoords" class="svg-preview__cursor-coords" aria-live="polite">
-          {{ formatCoord(cursorCoords.x) }}, {{ formatCoord(cursorCoords.y) }}
+        <div class="svg-preview__coords-panel">
+          <div v-if="cursorCoords" class="svg-preview__cursor-coords" aria-live="polite">
+            {{ formatCoord(cursorCoords.x) }}, {{ formatCoord(cursorCoords.y) }}
+          </div>
+
+          <div
+            v-if="clickedPoints.length > 0"
+            class="svg-preview__clicked-points"
+            :class="{
+              'svg-preview__clicked-points--no-transition': !paddingTransitionEnabled,
+              'svg-preview__clicked-points--collapsed': clickedPointsPaddingCollapsed,
+            }"
+            @transitionend="onClickedPointsPaddingTransitionEnd"
+          >
+            <TransitionGroup
+              ref="clickedPointsListRef"
+              name="clicked-points"
+              tag="div"
+              class="svg-preview__clicked-points-list"
+              :style="
+                clickedPointsListMinHeight ? { minHeight: clickedPointsListMinHeight } : undefined
+              "
+              :move-class="
+                coordsShiftAnimating ? 'clicked-points-move--paused' : 'clicked-points-move'
+              "
+              @before-leave="onClickedPointBeforeLeave"
+              @after-leave="onClickedPointAfterLeave"
+            >
+              <div
+                v-for="(point, index) in clickedPoints"
+                :key="point.key"
+                class="svg-preview__clicked-point"
+              >
+                <button
+                  type="button"
+                  class="svg-preview__clicked-point-remove ghost"
+                  aria-label="Remove coordinate"
+                  @click.stop="removeClickedPoint(index)"
+                >
+                  <span class="material-icons">remove</span>
+                </button>
+                <span>{{ formatCoord(point.x) }}, {{ formatCoord(point.y) }}</span>
+              </div>
+            </TransitionGroup>
+          </div>
         </div>
 
         <div class="svg-preview__axis-unit">
@@ -385,6 +502,7 @@ function toggleFullscreen() {
             :style="aspectRatioStyle"
             @mousemove="onMouseMove"
             @mouseleave="onMouseLeave"
+            @click="addClickedPoint"
           >
             <div class="svg-preview__svg-host" v-html="sanitized" />
             <svg
@@ -490,6 +608,16 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
     50% / 20px 20px;
   border-radius: $radius-md;
   overflow: hidden;
+  --clicked-coord-transition-time: 250ms;
+  --clicked-coord-gap: 0.15rem;
+  --clicked-coord-font-size: 0.6875rem;
+  --clicked-coord-line-height: 1.3;
+  --clicked-coord-padding-y: 0.15rem;
+  --clicked-coord-border-width: 1px;
+  --clicked-coord-row-height: calc(
+    2 * var(--clicked-coord-padding-y) + var(--clicked-coord-line-height) *
+      var(--clicked-coord-font-size) + 2 * var(--clicked-coord-border-width)
+  );
 
   &--framed {
     padding: $spacing-sm;
@@ -506,21 +634,101 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
     position: relative;
   }
 
-  &__cursor-coords {
+  &__coords-panel {
     position: absolute;
     top: 35px;
     right: 0;
     z-index: 2;
-    padding: 0.15rem 0.45rem;
-    font-family: $font-mono;
-    font-size: 0.6875rem;
-    line-height: 1.3;
-    color: $color-text;
-    background: color-mix(in srgb, var(--bg-raised) 92%, transparent);
-    border: 1px solid var(--border);
-    border-radius: $radius-sm;
+    max-width: calc(100% - 2.5rem);
     pointer-events: none;
+  }
+
+  &__cursor-coords {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 1;
+    padding: var(--clicked-coord-padding-y) 0.45rem;
+    color: $color-text;
+    font-family: $font-mono;
+    font-size: var(--clicked-coord-font-size);
+    line-height: var(--clicked-coord-line-height);
+    white-space: nowrap;
+    background: color-mix(in srgb, var(--bg-raised) 92%, transparent);
+    border: var(--clicked-coord-border-width) solid var(--border);
+    border-radius: $radius-sm;
     backdrop-filter: blur(4px);
+  }
+
+  &__clicked-points {
+    position: absolute;
+    top: 0;
+    right: 0;
+    min-width: 100%;
+    padding-top: var(--clicked-coord-row-height);
+    color: $color-text-muted;
+    font-family: $font-mono;
+    font-size: var(--clicked-coord-font-size);
+    line-height: var(--clicked-coord-line-height);
+    transition:
+      padding-top var(--clicked-coord-transition-time) ease,
+      border-width var(--clicked-coord-transition-time) ease;
+
+    &--collapsed {
+      padding-top: 0;
+    }
+
+    &--no-transition {
+      transition: none;
+    }
+
+    &:hover {
+      .svg-preview__clicked-point-remove {
+        opacity: 1;
+      }
+    }
+  }
+
+  &__clicked-points-list {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--clicked-coord-gap);
+  }
+
+  &__clicked-point {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    pointer-events: auto;
+    white-space: nowrap;
+
+    > span {
+      padding: var(--clicked-coord-padding-y) 0.45rem;
+      background: color-mix(in srgb, var(--bg-raised) 88%, transparent);
+      border: var(--clicked-coord-border-width) solid var(--border);
+      border-radius: $radius-sm;
+    }
+  }
+
+  &__clicked-point-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    padding: 0;
+    border-width: 0;
+    font-size: 0.875rem;
+    line-height: 1;
+    color: $color-text-muted;
+    opacity: 0;
+    transition: opacity var(--clicked-coord-transition-time) ease;
+
+    &:hover {
+      color: $color-text;
+    }
   }
 
   &__axis-unit {
@@ -721,11 +929,9 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
   }
 
   &:fullscreen {
-    .svg-preview {
-      &__cursor-coords {
-        font-size: 1rem;
-      }
+    --clicked-coord-font-size: 1rem;
 
+    .svg-preview {
       &__axis-unit {
         max-width: 80vw;
         max-height: 80vh;
@@ -740,6 +946,24 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
     .fullscreen-button {
       font-size: 1.5rem;
     }
+  }
+
+  :deep(.clicked-points-move) {
+    transition: transform var(--clicked-coord-transition-time) ease;
+  }
+
+  :deep(.clicked-points-move--paused) {
+    transition: none;
+  }
+
+  :deep(.clicked-points-leave-active) {
+    position: absolute;
+    right: 0;
+    transition: opacity var(--clicked-coord-transition-time) ease;
+  }
+
+  :deep(.clicked-points-leave-to) {
+    opacity: 0;
   }
 }
 </style>
