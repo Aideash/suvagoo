@@ -449,7 +449,7 @@ function onPreviewUpdatePath(value: string) {
     gap: $spacing-sm;
 
     &--code {
-      flex: 3 1 0;
+      max-height: 40cqh;
       min-height: 0;
       overflow: hidden;
     }

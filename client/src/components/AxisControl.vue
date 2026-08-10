@@ -183,7 +183,10 @@ function normalizeRange() {
       />
       <button type="button" class="axis-control__step-btn" @click="nudge(1)">+</button>
     </div>
-    <div class="axis-control__range-fields" :class="{ 'axis-control__range-fields--no-min': !showMinField }">
+    <div
+      class="axis-control__range-fields"
+      :class="{ 'axis-control__range-fields--no-min': !showMinField }"
+    >
       <label v-if="showMinField" class="axis-control__range-field">
         <span>min</span>
         <input

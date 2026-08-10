@@ -17,6 +17,7 @@ const emit = defineEmits<{
 
 const container = ref<HTMLElement | null>(null)
 const lineWrap = ref(false)
+const showEditor = ref(true)
 const wrapCompartment = new Compartment()
 let view: EditorView | null = null
 let applyingExternal = false
@@ -133,7 +134,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="svg-editor">
+  <div class="svg-editor" :class="{ 'svg-editor__content-hidden': !showEditor }">
     <div class="svg-editor__toolbar">
       <button
         type="button"
@@ -145,6 +146,14 @@ onBeforeUnmount(() => {
         <span class="material-icons sm">wrap_text</span>
         <span class="svg-editor__wrap-label">{{ lineWrap ? 'Wrap on' : 'Wrap off' }}</span>
       </button>
+      <button
+        type="button"
+        class="ghost svg-editor__preview-toggle"
+        :title="showEditor ? 'Switch to editor mode' : 'Switch to preview mode'"
+        @click="showEditor = !showEditor"
+      >
+        <span class="material-icons sm">{{ showEditor ? 'expand_less' : 'expand_more' }}</span>
+      </button>
     </div>
     <div ref="container" class="svg-editor__content" />
   </div>
@@ -154,14 +163,15 @@ onBeforeUnmount(() => {
 @use '../styles/variables' as *;
 
 .svg-editor {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: min-content 1fr;
   height: 100%;
   min-height: 0;
   overflow: hidden;
   border-radius: $radius-md;
   border: 1px solid $color-border;
   background: $color-surface;
+  transition: grid-template-rows 0.3s ease-in-out;
 
   &__toolbar {
     display: flex;
@@ -169,6 +179,10 @@ onBeforeUnmount(() => {
     flex-shrink: 0;
     padding: $spacing-xs $spacing-sm;
     border-bottom: 1px solid $color-border;
+
+    .svg-editor__preview-toggle {
+      margin-left: auto;
+    }
   }
 
   &__wrap-toggle {
@@ -215,6 +229,11 @@ onBeforeUnmount(() => {
 
   &__content :deep(.cm-scroller) {
     overflow: auto;
+  }
+
+  &__content-hidden {
+    grid-template-rows: min-content 0fr;
+    overflow: hidden;
   }
 }
 </style>
