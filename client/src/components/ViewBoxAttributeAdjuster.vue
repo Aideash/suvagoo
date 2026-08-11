@@ -22,15 +22,26 @@ const minX = ref(DEFAULT_VIEWBOX.minX)
 const minY = ref(DEFAULT_VIEWBOX.minY)
 const width = ref(DEFAULT_VIEWBOX.width)
 const height = ref(DEFAULT_VIEWBOX.height)
+const selectedField = ref<ViewBoxField>('minX')
 
 type FieldRange = { min: number; max: number; step: number }
 
-const fieldDefaults = ref<Record<ViewBoxField, FieldRange>>({
-  minX: { min: 0, max: 100, step: 1 },
-  minY: { min: 0, max: 100, step: 1 },
-  width: { min: 0, max: 100, step: 1 },
-  height: { min: 0, max: 100, step: 1 },
-})
+const sharedDefaults = ref<FieldRange>({ min: -100, max: 200, step: 1 })
+
+const fields: ReadonlyArray<{ key: ViewBoxField; label: string }> = [
+  { key: 'minX', label: 'min-x' },
+  { key: 'minY', label: 'min-y' },
+  { key: 'width', label: 'width' },
+  { key: 'height', label: 'height' },
+]
+
+const selectedLabel = computed(
+  () => fields.find((field) => field.key === selectedField.value)?.label ?? '',
+)
+const selectedValue = computed(() => currentViewBox()[selectedField.value])
+const selectedFixedMin = computed(() =>
+  selectedField.value === 'width' || selectedField.value === 'height' ? 0 : undefined,
+)
 
 const parseError = computed(() => {
   const trimmed = props.attribute.value.trim()
@@ -47,12 +58,12 @@ function currentViewBox(): ViewBox {
   }
 }
 
-function syncFieldDefaults(vb: ViewBox) {
-  fieldDefaults.value = {
-    minX: viewBoxFieldRange('minX', vb),
-    minY: viewBoxFieldRange('minY', vb),
-    width: viewBoxFieldRange('width', vb),
-    height: viewBoxFieldRange('height', vb),
+function syncSharedDefaults(vb: ViewBox) {
+  const ranges = fields.map((field) => viewBoxFieldRange(field.key, vb))
+  sharedDefaults.value = {
+    min: Math.min(...ranges.map((range) => range.min)),
+    max: Math.max(...ranges.map((range) => range.max)),
+    step: Math.min(...ranges.map((range) => range.step)),
   }
 }
 
@@ -76,7 +87,8 @@ watch(
     if (previous !== undefined && identity === previous) return
     syncFromValue(props.attribute.value)
     const parsed = parseViewBoxValue(props.attribute.value) ?? DEFAULT_VIEWBOX
-    syncFieldDefaults(parsed)
+    syncSharedDefaults(parsed)
+    selectedField.value = 'minX'
   },
   { immediate: true },
 )
@@ -85,24 +97,41 @@ function commitState() {
   emit('update', formatViewBoxValue(currentViewBox()))
 }
 
-function setMinX(value: number) {
-  minX.value = value
+function setField(field: ViewBoxField, value: number) {
+  const next = field === 'width' || field === 'height' ? Math.max(0, value) : value
+  switch (field) {
+    case 'minX':
+      minX.value = next
+      break
+    case 'minY':
+      minY.value = next
+      break
+    case 'width':
+      width.value = next
+      break
+    case 'height':
+      height.value = next
+      break
+  }
   commitState()
 }
 
-function setMinY(value: number) {
-  minY.value = value
-  commitState()
+function commitInput(field: ViewBoxField, event: Event) {
+  const input = event.target as HTMLInputElement
+  if (!input.value.trim()) {
+    input.value = String(currentViewBox()[field])
+    return
+  }
+  const next = Number(input.value)
+  if (!Number.isFinite(next)) {
+    input.value = String(currentViewBox()[field])
+    return
+  }
+  setField(field, next)
 }
 
-function setWidth(value: number) {
-  width.value = Math.max(0, value)
-  commitState()
-}
-
-function setHeight(value: number) {
-  height.value = Math.max(0, value)
-  commitState()
+function commitSelected(value: number) {
+  setField(selectedField.value, value)
 }
 </script>
 
@@ -112,42 +141,36 @@ function setHeight(value: number) {
       Could not parse value — sliders may not reflect the raw string.
     </p>
 
-    <AxisControl
-      label="min-x"
-      :value="minX"
-      :default-min="fieldDefaults.minX.min"
-      :default-max="fieldDefaults.minX.max"
-      :default-step="fieldDefaults.minX.step"
-      @update="setMinX"
-    />
+    <div class="viewbox-adjuster__grid">
+      <label
+        v-for="field in fields"
+        :key="field.key"
+        class="viewbox-adjuster__cell"
+        :class="{ 'viewbox-adjuster__cell--selected': selectedField === field.key }"
+        @click="selectedField = field.key"
+      >
+        <span class="viewbox-adjuster__label">{{ field.label }}</span>
+        <input
+          :value="currentViewBox()[field.key]"
+          type="number"
+          class="input viewbox-adjuster__input"
+          :min="field.key === 'width' || field.key === 'height' ? 0 : undefined"
+          step="any"
+          @focus="selectedField = field.key"
+          @change="commitInput(field.key, $event)"
+          @keydown.enter="commitInput(field.key, $event)"
+        />
+      </label>
+    </div>
 
     <AxisControl
-      label="min-y"
-      :value="minY"
-      :default-min="fieldDefaults.minY.min"
-      :default-max="fieldDefaults.minY.max"
-      :default-step="fieldDefaults.minY.step"
-      @update="setMinY"
-    />
-
-    <AxisControl
-      label="width"
-      :value="width"
-      :default-min="fieldDefaults.width.min"
-      :default-max="fieldDefaults.width.max"
-      :default-step="fieldDefaults.width.step"
-      :fixed-min="0"
-      @update="setWidth"
-    />
-
-    <AxisControl
-      label="height"
-      :value="height"
-      :default-min="fieldDefaults.height.min"
-      :default-max="fieldDefaults.height.max"
-      :default-step="fieldDefaults.height.step"
-      :fixed-min="0"
-      @update="setHeight"
+      :label="selectedLabel"
+      :value="selectedValue"
+      :default-min="sharedDefaults.min"
+      :default-max="sharedDefaults.max"
+      :default-step="sharedDefaults.step"
+      :fixed-min="selectedFixedMin"
+      @update="commitSelected"
     />
   </div>
 </template>
@@ -164,6 +187,59 @@ function setHeight(value: number) {
     margin: 0;
     font-size: 0.75rem;
     color: $color-text-muted;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: $spacing-xs;
+  }
+
+  &__cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: $spacing-xs;
+    border: 1px solid $color-border;
+    border-radius: $radius-sm;
+    background: $color-bg;
+    cursor: text;
+    transition:
+      border-color 0.12s,
+      box-shadow 0.12s;
+
+    &:focus-within,
+    &--selected {
+      border-color: $color-accent;
+    }
+
+    &:focus-within {
+      box-shadow: 0 0 0 1px $color-accent;
+    }
+  }
+
+  &__label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+  }
+
+  &__input {
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: $color-text;
+    font-family: $font-mono;
+    font-size: 0.8125rem;
+
+    &:focus {
+      outline: none;
+    }
   }
 }
 </style>

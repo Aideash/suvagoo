@@ -648,7 +648,7 @@ function onAttributeUpdate(value: string) {
   }
 
   &__snippet-mode-label {
-    font-size: 0.6875rem;
+    font-size: 0.5rem;
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;

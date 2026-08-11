@@ -11,6 +11,7 @@ export type AttributeKind =
   | 'path'
   | 'dual-number'
   | 'viewBox'
+  | 'color-matrix-values'
   | 'text'
 
 export interface DualNumberLabels {
@@ -230,8 +231,9 @@ function enumSchemaFor(name: string): AttributeSchema | null {
   return { kind: 'enum', enumValues: ENUM_ATTRS[key] }
 }
 
-export function getAttributeSchema(name: string): AttributeSchema {
+export function getAttributeSchema(name: string, tagName?: string): AttributeSchema {
   const normalized = name.toLowerCase()
+  const tag = tagName ? tagName.toLowerCase() : ''
 
   if (COLOR_ATTRS.has(normalized)) {
     return { kind: 'color' }
@@ -272,6 +274,9 @@ export function getAttributeSchema(name: string): AttributeSchema {
   }
   if (normalized === 'viewbox') {
     return { kind: 'viewBox' }
+  }
+  if (normalized === 'values' && tag === 'fecolormatrix') {
+    return { kind: 'color-matrix-values' }
   }
 
   return { kind: 'text' }

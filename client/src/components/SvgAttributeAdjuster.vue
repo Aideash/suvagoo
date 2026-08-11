@@ -18,6 +18,7 @@ import PointsAttributeAdjuster from './PointsAttributeAdjuster.vue'
 import PathAttributeAdjuster from './PathAttributeAdjuster.vue'
 import DualNumericAttributeAdjuster from './DualNumericAttributeAdjuster.vue'
 import ViewBoxAttributeAdjuster from './ViewBoxAttributeAdjuster.vue'
+import ColorMatrixValuesAdjuster from './ColorMatrixValuesAdjuster.vue'
 
 const props = defineProps<{
   attribute: AttributeContext
@@ -34,7 +35,7 @@ const emit = defineEmits<{
 
 const draft = ref(props.attribute.value)
 
-const schema = computed(() => getAttributeSchema(props.attribute.attrName))
+const schema = computed(() => getAttributeSchema(props.attribute.attrName, props.attribute.tagName))
 const viewBox = computed(() => viewBoxFromContent(props.content))
 const isLengthKind = computed(
   () => schema.value.kind === 'length' || schema.value.kind === 'number',
@@ -313,6 +314,13 @@ function onEnumChange(event: Event) {
     <ViewBoxAttributeAdjuster
       v-else-if="schema.kind === 'viewBox'"
       :attribute="attribute"
+      @update="commit"
+    />
+
+    <ColorMatrixValuesAdjuster
+      v-else-if="schema.kind === 'color-matrix-values'"
+      :attribute="attribute"
+      :content="content"
       @update="commit"
     />
 
