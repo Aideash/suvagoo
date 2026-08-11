@@ -9,9 +9,11 @@ import {
   parseColorAlpha,
   parseColorToHex,
   parseNumericValue,
+  unitsForAttribute,
   viewBoxFromContent,
 } from '../lib/attributeSchema'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
+import AxisControl from './AxisControl.vue'
 import PointsAttributeAdjuster from './PointsAttributeAdjuster.vue'
 import PathAttributeAdjuster from './PathAttributeAdjuster.vue'
 import DualNumericAttributeAdjuster from './DualNumericAttributeAdjuster.vue'
@@ -30,12 +32,6 @@ const emit = defineEmits<{
 }>()
 
 const draft = ref(props.attribute.value)
-const lengthTextDraft = ref(props.attribute.value)
-const isEditingLengthText = ref(false)
-
-const rangeMin = ref(0)
-const rangeMax = ref(100)
-const rangeStep = ref(1)
 
 const schema = computed(() => getAttributeSchema(props.attribute.attrName))
 const viewBox = computed(() => viewBoxFromContent(props.content))
@@ -47,20 +43,21 @@ const defaultNumericRange = computed(() =>
   numericRangeForAttribute(props.attribute.attrName, viewBox.value, props.attribute.value),
 )
 
-function syncRangeDefaults() {
-  const defaults = defaultNumericRange.value
-  rangeMin.value = defaults.min
-  rangeMax.value = defaults.max
-  rangeStep.value = defaults.step
+/**
+ * Snapshot of the derived range handed to AxisControl. Held apart from
+ * defaultNumericRange so that dragging a value whose range is inferred from the
+ * value itself does not keep resetting the range the user set up.
+ */
+const axisDefaults = ref({ min: 0, max: 100, step: 1 })
+
+function syncAxisDefaults(value: string) {
+  axisDefaults.value = numericRangeForAttribute(props.attribute.attrName, viewBox.value, value)
 }
 
 watch(
   () => props.attribute.value,
   (value) => {
     draft.value = value
-    if (!isEditingLengthText.value) {
-      lengthTextDraft.value = value
-    }
   },
 )
 
@@ -68,44 +65,26 @@ watch(
   () => attributeIdentity(props.attribute),
   (identity, previous) => {
     if (previous !== undefined && identity === previous) return
-    isEditingLengthText.value = false
-    lengthTextDraft.value = props.attribute.value
-    syncRangeDefaults()
+    syncAxisDefaults(props.attribute.value)
   },
   { immediate: true },
 )
 
 const effectiveRange = computed(() => {
-  let min = rangeMin.value
-  let max = rangeMax.value
-  let step = rangeStep.value
-  if (!Number.isFinite(min)) min = defaultNumericRange.value.min
-  if (!Number.isFinite(max)) max = defaultNumericRange.value.max
-  if (!Number.isFinite(step) || step <= 0) step = defaultNumericRange.value.step
+  const defaults = defaultNumericRange.value
+  let min = Number.isFinite(defaults.min) ? defaults.min : 0
+  let max = Number.isFinite(defaults.max) ? defaults.max : 100
+  const step = Number.isFinite(defaults.step) && defaults.step > 0 ? defaults.step : 1
   if (min > max) [min, max] = [max, min]
   return { min, max, step }
 })
 
 const parsedNumeric = computed(() => parseNumericValue(props.attribute.value))
 const lengthUnit = computed(() => parsedNumeric.value?.unit ?? '')
+const lengthUnits = computed(() => unitsForAttribute(props.attribute.attrName))
 
-const sliderNumeric = computed(() => {
-  const fromDraft = parseNumericValue(lengthTextDraft.value)
-  if (fromDraft) return fromDraft.number
-  return parsedNumeric.value?.number ?? effectiveRange.value.min
-})
-
-const sliderValue = computed({
-  get() {
-    return Math.min(
-      effectiveRange.value.max,
-      Math.max(effectiveRange.value.min, sliderNumeric.value),
-    )
-  },
-  set(next: number) {
-    commitLengthNumeric(next)
-  },
-})
+/** Falls through to the raw text input while the value is not a plain number. */
+const showAxisControl = computed(() => isLengthKind.value && parsedNumeric.value != null)
 
 const colorHex = computed({
   get() {
@@ -174,9 +153,6 @@ const percentageSlider = computed({
 
 function commit(value: string) {
   draft.value = value
-  if (!isEditingLengthText.value) {
-    lengthTextDraft.value = value
-  }
   emit('update', value)
 }
 
@@ -186,42 +162,19 @@ function commitDraft() {
   }
 }
 
-function commitLengthNumeric(number: number) {
-  commit(formatNumericValue(number, lengthUnit.value))
-}
-
-function onLengthTextInput(event: Event) {
-  isEditingLengthText.value = true
-  lengthTextDraft.value = (event.target as HTMLInputElement).value
-}
-
-function onLengthTextEnter(event: KeyboardEvent) {
-  const value = (event.target as HTMLInputElement).value
-  isEditingLengthText.value = false
-  if (value.trim() === '') {
-    commit('')
-    return
+function onLengthUpdate(value: number, unit: string) {
+  const next = formatNumericValue(value, unit)
+  if (unit !== lengthUnit.value) {
+    syncAxisDefaults(next)
   }
-  commit(value)
-}
-
-function onLengthTextBlur(event: FocusEvent) {
-  isEditingLengthText.value = false
-  lengthTextDraft.value = props.attribute.value
-  ;(event.target as HTMLInputElement).value = props.attribute.value
+  commit(next)
 }
 
 function nudge(delta: number) {
-  const source = isLengthKind.value ? lengthTextDraft.value : draft.value
-  const parsed = parseNumericValue(source) ?? parsedNumeric.value
+  const parsed = parseNumericValue(draft.value) ?? parsedNumeric.value
   if (!parsed) return
   const step = schema.value.kind === 'opacity' ? 0.05 : effectiveRange.value.step
-  const next = parsed.number + delta * step
-  if (isLengthKind.value) {
-    commitLengthNumeric(next)
-  } else {
-    commit(formatNumericValue(next, parsed.unit))
-  }
+  commit(formatNumericValue(parsed.number + delta * step, parsed.unit))
 }
 
 function onEnumChange(event: Event) {
@@ -356,58 +309,16 @@ function onEnumChange(event: Event) {
       @update="commit"
     />
 
-    <div v-else-if="isLengthKind" class="attr-adjuster__controls">
-      <input
-        v-model.number="sliderValue"
-        type="range"
-        class="attr-adjuster__slider"
-        :min="effectiveRange.min"
-        :max="effectiveRange.max"
-        :step="effectiveRange.step"
-      />
-      <div class="attr-adjuster__stepper">
-        <button type="button" class="attr-adjuster__step-btn" @click="nudge(-1)">−</button>
-        <input
-          :value="lengthTextDraft"
-          type="text"
-          class="input attr-adjuster__number"
-          @input="onLengthTextInput"
-          @keydown.enter="onLengthTextEnter"
-          @blur="onLengthTextBlur"
-        />
-        <button type="button" class="attr-adjuster__step-btn" @click="nudge(1)">+</button>
-      </div>
-      <div class="attr-adjuster__range-fields">
-        <label class="attr-adjuster__range-field">
-          <span>min</span>
-          <input
-            v-model.number="rangeMin"
-            type="number"
-            class="input attr-adjuster__range-input"
-            step="any"
-          />
-        </label>
-        <label class="attr-adjuster__range-field">
-          <span>max</span>
-          <input
-            v-model.number="rangeMax"
-            type="number"
-            class="input attr-adjuster__range-input"
-            step="any"
-          />
-        </label>
-        <label class="attr-adjuster__range-field">
-          <span>step</span>
-          <input
-            v-model.number="rangeStep"
-            type="number"
-            class="input attr-adjuster__range-input"
-            min="0"
-            step="any"
-          />
-        </label>
-      </div>
-    </div>
+    <AxisControl
+      v-else-if="showAxisControl"
+      :value="parsedNumeric?.number ?? 0"
+      :unit="lengthUnit"
+      :units="lengthUnits"
+      :default-min="axisDefaults.min"
+      :default-max="axisDefaults.max"
+      :default-step="axisDefaults.step"
+      @update="onLengthUpdate"
+    />
 
     <div v-else class="attr-adjuster__controls">
       <input
@@ -496,7 +407,7 @@ function onEnumChange(event: Event) {
     font-family: $font-mono;
     font-size: 0.75rem;
     text-align: right;
-    padding-right: $spacing-xs;
+    padding-right: 0;
   }
 
   &__alpha-unit {
@@ -570,30 +481,6 @@ function onEnumChange(event: Event) {
       border-color: $color-accent;
       color: $color-accent;
     }
-  }
-
-  &__range-fields {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: $spacing-xs;
-  }
-
-  &__range-field {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 20px;
-    font-size: 0.625rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: $color-text-muted;
-  }
-
-  &__range-input {
-    font-family: $font-mono;
-    font-size: 0.75rem;
-    padding: 2px $spacing-xs;
   }
 }
 </style>

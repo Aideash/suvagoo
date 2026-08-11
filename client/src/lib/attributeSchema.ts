@@ -24,7 +24,13 @@ export interface AttributeSchema {
   max?: number
   step?: number
   dualNumber?: DualNumberLabels
+  /** Units the value may carry; '' is the unitless (user space) option. */
+  units?: readonly string[]
 }
+
+const UNITLESS: readonly string[] = ['']
+
+const CSS_LENGTH_UNITS: readonly string[] = ['', 'px', '%', 'em', 'rem', 'pt', 'cm', 'mm', 'in']
 
 const COLOR_ATTRS = new Set([
   'fill',
@@ -76,6 +82,30 @@ const LENGTH_ATTRS = new Set([
   'targetx',
   'targety',
   'limitingconeangle',
+])
+
+/** Subset of LENGTH_ATTRS that accepts a CSS unit; the rest are user-space numbers. */
+const CSS_LENGTH_ATTRS = new Set([
+  'x',
+  'y',
+  'width',
+  'height',
+  'cx',
+  'cy',
+  'r',
+  'rx',
+  'ry',
+  'x1',
+  'y1',
+  'x2',
+  'y2',
+  'fx',
+  'fy',
+  'dx',
+  'dy',
+  'stroke-width',
+  'font-size',
+  'textlength',
 ])
 
 const DUAL_NUMBER_ATTRS = new Set(['stddeviation', 'basefrequency'])
@@ -216,10 +246,14 @@ export function getAttributeSchema(name: string): AttributeSchema {
     return { kind: 'percentage', min: 0, max: 100, step: 1 }
   }
   if (LENGTH_ATTRS.has(normalized)) {
-    return { kind: 'length', step: 1 }
+    return {
+      kind: 'length',
+      step: 1,
+      units: CSS_LENGTH_ATTRS.has(normalized) ? CSS_LENGTH_UNITS : UNITLESS,
+    }
   }
   if (NUMBER_ATTRS.has(normalized)) {
-    return { kind: 'number', step: 1 }
+    return { kind: 'number', step: 1, units: UNITLESS }
   }
   if (DUAL_NUMBER_ATTRS.has(normalized)) {
     return {
@@ -237,6 +271,10 @@ export function getAttributeSchema(name: string): AttributeSchema {
   }
 
   return { kind: 'text' }
+}
+
+export function unitsForAttribute(name: string): readonly string[] {
+  return getAttributeSchema(name).units ?? UNITLESS
 }
 
 export function numericRangeForAttribute(
@@ -257,6 +295,10 @@ export function numericRangeForAttribute(
     if (unit === '%' || !unit) {
       return { min: 0, max: 100, step: baseStep }
     }
+  }
+
+  if (parsed?.unit === '%') {
+    return { min: 0, max: 100, step: baseStep }
   }
 
   const { width, height } = viewBox

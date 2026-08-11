@@ -72,13 +72,6 @@ function axisTicks(min: number, max: number): number[] {
   return ticks
 }
 
-const xTicks = computed(() =>
-  axisTicks(viewBox.value.minX, viewBox.value.minX + viewBox.value.width),
-)
-const yTicks = computed(() =>
-  axisTicks(viewBox.value.minY, viewBox.value.minY + viewBox.value.height),
-)
-
 function tickFraction(value: number, min: number, span: number): number {
   if (span <= 0) return 0
   return (value - min) / span
@@ -114,6 +107,137 @@ const overlayViewBox = computed(() => {
   const { minX, minY, width, height } = viewBox.value
   return `${minX} ${minY} ${width} ${height}`
 })
+
+const MIN_ZOOM = 1
+const MAX_ZOOM = 20
+const PAN_THRESHOLD_PX = 3
+
+const zoom = ref(1)
+const pan = ref({ x: 0, y: 0 })
+const panning = ref(false)
+const suppressClick = ref(false)
+const panStart = ref<{
+  pointerX: number
+  pointerY: number
+  pan: { x: number; y: number }
+  width: number
+  height: number
+} | null>(null)
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function setView(nextZoom: number, nextPan: { x: number; y: number }) {
+  const z = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM)
+  // Pan is stored as a fraction of the viewport, and stays negative so the
+  // artwork always covers the frame.
+  const limit = 1 - z
+  zoom.value = z
+  pan.value = { x: clamp(nextPan.x, limit, 0), y: clamp(nextPan.y, limit, 0) }
+}
+
+function resetView() {
+  zoom.value = 1
+  pan.value = { x: 0, y: 0 }
+}
+
+const isZoomed = computed(() => zoom.value !== 1 || pan.value.x !== 0 || pan.value.y !== 0)
+
+const zoomLabel = computed(() => `${Math.round(zoom.value * 100)}%`)
+
+const viewTransform = computed(() => ({
+  transform: `translate(${pan.value.x * 100}%, ${pan.value.y * 100}%) scale(${zoom.value})`,
+  transformOrigin: '0 0',
+  '--preview-zoom': String(zoom.value),
+}))
+
+const visibleRange = computed(() => {
+  const { minX, minY, width, height } = viewBox.value
+  const z = zoom.value
+  return {
+    minX: minX + width * (-pan.value.x / z),
+    maxX: minX + width * ((1 - pan.value.x) / z),
+    minY: minY + height * (-pan.value.y / z),
+    maxY: minY + height * ((1 - pan.value.y) / z),
+  }
+})
+
+const xTicks = computed(() => axisTicks(visibleRange.value.minX, visibleRange.value.maxX))
+const yTicks = computed(() => axisTicks(visibleRange.value.minY, visibleRange.value.maxY))
+
+function viewportRect(): DOMRect | null {
+  const rect = contentRef.value?.getBoundingClientRect()
+  if (!rect || rect.width <= 0 || rect.height <= 0) return null
+  return rect
+}
+
+function onWheel(event: WheelEvent) {
+  const rect = viewportRect()
+  if (!rect) return
+
+  const delta = event.deltaY * (event.deltaMode === 1 ? 16 : 1)
+  const sensitivity = event.ctrlKey ? 0.01 : 0.0025
+  const nextZoom = clamp(zoom.value * Math.exp(-delta * sensitivity), MIN_ZOOM, MAX_ZOOM)
+  if (nextZoom === zoom.value) return
+
+  const focus = {
+    x: (event.clientX - rect.left) / rect.width,
+    y: (event.clientY - rect.top) / rect.height,
+  }
+  const anchor = {
+    x: (focus.x - pan.value.x) / zoom.value,
+    y: (focus.y - pan.value.y) / zoom.value,
+  }
+  setView(nextZoom, {
+    x: focus.x - nextZoom * anchor.x,
+    y: focus.y - nextZoom * anchor.y,
+  })
+}
+
+function onContentPointerDown(event: PointerEvent) {
+  // A pan that ends outside the frame never produces a click here, so clear any
+  // leftover suppression at the start of the next gesture instead.
+  suppressClick.value = false
+  if (event.button !== 0 || zoom.value <= MIN_ZOOM) return
+  const rect = viewportRect()
+  if (!rect) return
+
+  panStart.value = {
+    pointerX: event.clientX,
+    pointerY: event.clientY,
+    pan: { ...pan.value },
+    width: rect.width,
+    height: rect.height,
+  }
+  window.addEventListener('pointermove', onContentPointerMove)
+  window.addEventListener('pointerup', onContentPointerUp)
+  window.addEventListener('pointercancel', onContentPointerUp)
+}
+
+function onContentPointerMove(event: PointerEvent) {
+  const start = panStart.value
+  if (!start) return
+
+  const dx = event.clientX - start.pointerX
+  const dy = event.clientY - start.pointerY
+  if (!panning.value && Math.hypot(dx, dy) < PAN_THRESHOLD_PX) return
+
+  panning.value = true
+  setView(zoom.value, {
+    x: start.pan.x + dx / start.width,
+    y: start.pan.y + dy / start.height,
+  })
+}
+
+function onContentPointerUp() {
+  if (panning.value) suppressClick.value = true
+  panning.value = false
+  panStart.value = null
+  window.removeEventListener('pointermove', onContentPointerMove)
+  window.removeEventListener('pointerup', onContentPointerUp)
+  window.removeEventListener('pointercancel', onContentPointerUp)
+}
 
 const showPointsOverlay = computed(
   () => props.pointsEdit != null && props.pointsEdit.points.length > 0 && props.showAxes,
@@ -277,6 +401,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onPathHandlePointerMove)
   window.removeEventListener('pointerup', onHandlePointerUp)
   window.removeEventListener('pointercancel', onHandlePointerUp)
+  window.removeEventListener('pointermove', onContentPointerMove)
+  window.removeEventListener('pointerup', onContentPointerUp)
+  window.removeEventListener('pointercancel', onContentPointerUp)
 })
 
 function clientToSvg(svg: SVGSVGElement, clientX: number, clientY: number): Point2D | null {
@@ -332,8 +459,8 @@ const aspectRatioStyle = computed(() => {
 
 const handleRadius = computed(() => {
   const { width, height } = viewBox.value
-  if (width <= 0 || height <= 0) return 5
-  return Math.min(width, height) / 20
+  if (width <= 0 || height <= 0) return 5 / zoom.value
+  return Math.min(width, height) / 20 / zoom.value
 })
 
 const fullscreen = ref(false)
@@ -349,6 +476,11 @@ function toggleFullscreen() {
 }
 
 async function addClickedPoint() {
+  if (suppressClick.value) {
+    suppressClick.value = false
+    return
+  }
+
   const currentCoords = cursorCoords.value
   if (!currentCoords) return
 
@@ -474,7 +606,9 @@ function removeClickedPoint(index = -1) {
               v-for="tick in xTicks"
               :key="`x-${tick}`"
               class="svg-preview__tick svg-preview__tick--x"
-              :style="{ left: `${tickFraction(tick, viewBox.minX, viewBox.width) * 100}%` }"
+              :style="{
+                left: `${tickFraction(tick, visibleRange.minX, visibleRange.maxX - visibleRange.minX) * 100}%`,
+              }"
             >
               <span class="svg-preview__tick-label">{{ formatCoord(tick) }}</span>
               <span class="svg-preview__tick-mark svg-preview__tick-mark--x" />
@@ -486,7 +620,9 @@ function removeClickedPoint(index = -1) {
               v-for="tick in yTicks"
               :key="`y-${tick}`"
               class="svg-preview__tick svg-preview__tick--y"
-              :style="{ top: `${tickFraction(tick, viewBox.minY, viewBox.height) * 100}%` }"
+              :style="{
+                top: `${tickFraction(tick, visibleRange.minY, visibleRange.maxY - visibleRange.minY) * 100}%`,
+              }"
             >
               <span class="svg-preview__tick-mark svg-preview__tick-mark--y" />
               <span class="svg-preview__tick-label">{{ formatCoord(tick) }}</span>
@@ -498,85 +634,101 @@ function removeClickedPoint(index = -1) {
             class="svg-preview__content svg-preview__content--framed"
             :class="{
               'svg-preview__content--editing-points': showPointsOverlay || showPathOverlay,
+              'svg-preview__content--panning': panning,
             }"
             :style="aspectRatioStyle"
             @mousemove="onMouseMove"
             @mouseleave="onMouseLeave"
             @click="addClickedPoint"
+            @wheel.prevent="onWheel"
+            @pointerdown="onContentPointerDown"
           >
-            <div class="svg-preview__svg-host" v-html="sanitized" />
-            <svg
-              v-if="(showPointsOverlay && pointsEdit) || (showPathOverlay && pathEdit)"
-              ref="overlayRef"
-              class="svg-preview__overlay"
-              :viewBox="overlayViewBox"
-              preserveAspectRatio="xMidYMid meet"
-              aria-hidden="true"
+            <button
+              v-if="isZoomed"
+              type="button"
+              class="ghost svg-preview__zoom-badge"
+              title="Reset zoom"
+              @click.stop="resetView"
+              @pointerdown.stop
             >
-              <template v-if="showPathOverlay && pathEdit">
-                <path class="svg-preview__overlay-path" :d="pathOverlayD" fill="none" />
-                <line
-                  v-for="(line, li) in pathControlLines"
-                  :key="`cl-${li}`"
-                  class="svg-preview__control-line"
-                  :class="{ 'svg-preview__control-line--dashed': line.dashed }"
-                  :x1="line.x1"
-                  :y1="line.y1"
-                  :x2="line.x2"
-                  :y2="line.y2"
-                />
-                <rect
-                  v-for="handle in pathHandles.filter((h) => h.kind !== 'endpoint')"
-                  :key="`ph-${handle.flatIndex}`"
-                  class="svg-preview__handle svg-preview__handle--control"
-                  :class="{
-                    'svg-preview__handle--selected': isPathHandleSelected(handle.flatIndex),
-                    'svg-preview__handle--dragging': draggingHandleIndex === handle.flatIndex,
-                  }"
-                  :x="handle.point.x - handleRadius * 0.75"
-                  :y="handle.point.y - handleRadius * 0.75"
-                  :width="handleRadius * 1.5"
-                  :height="handleRadius * 1.5"
-                  @pointerdown="onPathHandlePointerDown(handle.flatIndex, $event)"
-                  @click="onPathHandleClick(handle.flatIndex, $event)"
-                />
-                <circle
-                  v-for="handle in pathHandles.filter((h) => h.kind === 'endpoint')"
-                  :key="`pe-${handle.flatIndex}`"
-                  class="svg-preview__handle"
-                  :class="{
-                    'svg-preview__handle--selected': isPathHandleSelected(handle.flatIndex),
-                    'svg-preview__handle--dragging': draggingHandleIndex === handle.flatIndex,
-                  }"
-                  :cx="handle.point.x"
-                  :cy="handle.point.y"
-                  :r="handleRadius"
-                  @pointerdown="onPathHandlePointerDown(handle.flatIndex, $event)"
-                  @click="onPathHandleClick(handle.flatIndex, $event)"
-                />
-              </template>
-              <template v-if="showPointsOverlay && pointsEdit">
-                <polyline
-                  class="svg-preview__overlay-path"
-                  :points="formatPoints(pointsEdit.points)"
-                  fill="none"
-                />
-                <circle
-                  v-for="(point, index) in pointsEdit.points"
-                  :key="index"
-                  class="svg-preview__handle"
-                  :class="{
-                    'svg-preview__handle--selected': pointsEdit.selectedIndex === index,
-                    'svg-preview__handle--dragging': draggingIndex === index,
-                  }"
-                  :cx="point.x"
-                  :cy="point.y"
-                  :r="handleRadius"
-                  @pointerdown="onHandlePointerDown(index, $event)"
-                  @click="onHandleClick(index, $event)"
-                />
-              </template>
-            </svg>
+              {{ zoomLabel }}
+            </button>
+
+            <div class="svg-preview__viewport" :style="viewTransform">
+              <div class="svg-preview__svg-host" v-html="sanitized" />
+              <svg
+                v-if="(showPointsOverlay && pointsEdit) || (showPathOverlay && pathEdit)"
+                ref="overlayRef"
+                class="svg-preview__overlay"
+                :viewBox="overlayViewBox"
+                preserveAspectRatio="xMidYMid meet"
+                aria-hidden="true"
+              >
+                <template v-if="showPathOverlay && pathEdit">
+                  <path class="svg-preview__overlay-path" :d="pathOverlayD" fill="none" />
+                  <line
+                    v-for="(line, li) in pathControlLines"
+                    :key="`cl-${li}`"
+                    class="svg-preview__control-line"
+                    :class="{ 'svg-preview__control-line--dashed': line.dashed }"
+                    :x1="line.x1"
+                    :y1="line.y1"
+                    :x2="line.x2"
+                    :y2="line.y2"
+                  />
+                  <rect
+                    v-for="handle in pathHandles.filter((h) => h.kind !== 'endpoint')"
+                    :key="`ph-${handle.flatIndex}`"
+                    class="svg-preview__handle svg-preview__handle--control"
+                    :class="{
+                      'svg-preview__handle--selected': isPathHandleSelected(handle.flatIndex),
+                      'svg-preview__handle--dragging': draggingHandleIndex === handle.flatIndex,
+                    }"
+                    :x="handle.point.x - handleRadius * 0.75"
+                    :y="handle.point.y - handleRadius * 0.75"
+                    :width="handleRadius * 1.5"
+                    :height="handleRadius * 1.5"
+                    @pointerdown="onPathHandlePointerDown(handle.flatIndex, $event)"
+                    @click="onPathHandleClick(handle.flatIndex, $event)"
+                  />
+                  <circle
+                    v-for="handle in pathHandles.filter((h) => h.kind === 'endpoint')"
+                    :key="`pe-${handle.flatIndex}`"
+                    class="svg-preview__handle"
+                    :class="{
+                      'svg-preview__handle--selected': isPathHandleSelected(handle.flatIndex),
+                      'svg-preview__handle--dragging': draggingHandleIndex === handle.flatIndex,
+                    }"
+                    :cx="handle.point.x"
+                    :cy="handle.point.y"
+                    :r="handleRadius"
+                    @pointerdown="onPathHandlePointerDown(handle.flatIndex, $event)"
+                    @click="onPathHandleClick(handle.flatIndex, $event)"
+                  />
+                </template>
+                <template v-if="showPointsOverlay && pointsEdit">
+                  <polyline
+                    class="svg-preview__overlay-path"
+                    :points="formatPoints(pointsEdit.points)"
+                    fill="none"
+                  />
+                  <circle
+                    v-for="(point, index) in pointsEdit.points"
+                    :key="index"
+                    class="svg-preview__handle"
+                    :class="{
+                      'svg-preview__handle--selected': pointsEdit.selectedIndex === index,
+                      'svg-preview__handle--dragging': draggingIndex === index,
+                    }"
+                    :cx="point.x"
+                    :cy="point.y"
+                    :r="handleRadius"
+                    @pointerdown="onHandlePointerDown(index, $event)"
+                    @click="onHandleClick(index, $event)"
+                  />
+                </template>
+              </svg>
+            </div>
           </div>
         </div>
       </div>
@@ -593,6 +745,12 @@ function removeClickedPoint(index = -1) {
 
 $axis-size: 1.75rem;
 $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
+
+// Overlay strokes and dashes are scaled by the viewport transform, so counter-scale
+// them to keep a constant on-screen size at every zoom level.
+@function unzoomed($value) {
+  @return calc(#{$value} / var(--preview-zoom, 1));
+}
 
 .svg-preview {
   display: flex;
@@ -828,6 +986,7 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
       max-height: calc(100cqh - #{$axis-size});
       cursor: crosshair;
       position: relative;
+      overflow: hidden;
 
       :deep(svg) {
         display: block;
@@ -838,6 +997,35 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
 
     &--editing-points {
       cursor: crosshair;
+    }
+
+    &--panning {
+      cursor: grabbing;
+    }
+  }
+
+  &__viewport {
+    position: absolute;
+    inset: 0;
+  }
+
+  &__zoom-badge {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    z-index: 2;
+    padding: var(--clicked-coord-padding-y) 0.45rem;
+    color: $color-text-muted;
+    font-family: $font-mono;
+    font-size: var(--clicked-coord-font-size);
+    line-height: var(--clicked-coord-line-height);
+    background: color-mix(in srgb, var(--bg-raised) 88%, transparent);
+    border: var(--clicked-coord-border-width) solid var(--border);
+    border-radius: $radius-sm;
+    cursor: pointer;
+
+    &:hover {
+      color: $color-text;
     }
   }
 
@@ -863,20 +1051,20 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
 
   &__overlay-path {
     stroke: color-mix(in srgb, $color-accent 55%, transparent);
-    stroke-width: 1;
-    stroke-dasharray: 4 3;
+    stroke-width: unzoomed(1px);
+    stroke-dasharray: unzoomed(4px) unzoomed(3px);
     vector-effect: non-scaling-stroke;
     pointer-events: none;
   }
 
   &__control-line {
     stroke: color-mix(in srgb, $color-accent 35%, transparent);
-    stroke-width: 1;
+    stroke-width: unzoomed(1px);
     vector-effect: non-scaling-stroke;
     pointer-events: none;
 
     &--dashed {
-      stroke-dasharray: 3 2;
+      stroke-dasharray: unzoomed(3px) unzoomed(2px);
       opacity: 0.7;
     }
   }
@@ -884,7 +1072,7 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
   &__handle {
     fill: var(--bg-raised);
     stroke: $color-accent;
-    stroke-width: 2;
+    stroke-width: unzoomed(2px);
     vector-effect: non-scaling-stroke;
     pointer-events: all;
     cursor: grab;
@@ -892,7 +1080,7 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
 
     &--selected {
       fill: color-mix(in srgb, $color-accent 25%, var(--bg-raised));
-      stroke-width: 2.5;
+      stroke-width: unzoomed(2.5px);
     }
 
     &--dragging {
@@ -903,7 +1091,7 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
     &--control {
       fill: color-mix(in srgb, $color-accent 15%, var(--bg-raised));
       stroke: color-mix(in srgb, $color-accent 70%, transparent);
-      stroke-width: 1.5;
+      stroke-width: unzoomed(1.5px);
     }
 
     &--control#{&}--selected {

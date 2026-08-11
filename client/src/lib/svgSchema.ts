@@ -95,7 +95,14 @@ const FE_LIGHT_CHILDREN = ['feDistantLight', 'fePointLight', 'feSpotLight'] as c
 const FE_FUNC_CHILDREN = ['feFuncR', 'feFuncG', 'feFuncB', 'feFuncA'] as const
 
 /** Standard geometry/result attrs on filter primitives (SVGFilterPrimitiveStandardAttributes). */
-const FE_STD_ATTRIBUTES = ['x', 'y', 'width', 'height', 'result', 'color-interpolation-filters'] as const
+const FE_STD_ATTRIBUTES = [
+  'x',
+  'y',
+  'width',
+  'height',
+  'result',
+  'color-interpolation-filters',
+] as const
 
 function feElement(
   tag: string,
@@ -107,7 +114,12 @@ function feElement(
   return {
     tag,
     commonAttributes,
-    attributes: [...commonAttributes, ...extraAttributes, ...FE_STD_ATTRIBUTES, ...GLOBAL_ATTRIBUTES],
+    attributes: [
+      ...commonAttributes,
+      ...extraAttributes,
+      ...FE_STD_ATTRIBUTES,
+      ...GLOBAL_ATTRIBUTES,
+    ],
     children,
     snippet,
   }
@@ -252,8 +264,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     commonAttributes: ['id', 'viewBox', 'width', 'height'],
     attributes: ['id', 'viewBox', 'width', 'height', 'preserveAspectRatio', ...GLOBAL_ATTRIBUTES],
     children: [...GRAPHICAL_CHILDREN],
-    snippet:
-      '<symbol id="icon" viewBox="0 0 100 100"></symbol>',
+    snippet: '<symbol id="icon" viewBox="0 0 100 100"></symbol>',
   },
   {
     tag: 'linearGradient',
@@ -337,7 +348,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       ...GLOBAL_ATTRIBUTES,
     ],
     children: [...FILTER_PRIMITIVE_CHILDREN],
-    snippet: '<filter id="filter-id"><feGaussianBlur stdDeviation="3"/></filter>',
+    snippet: '<filter id="filter-id"></filter>',
   },
   {
     tag: 'image',
@@ -424,7 +435,13 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     [],
     '<feImage href="" preserveAspectRatio="xMidYMid meet" result="image"/>',
   ),
-  feElement('feMerge', ['result'], [], ['feMergeNode'], '<feMerge result="merge"><feMergeNode in="SourceGraphic"/></feMerge>'),
+  feElement(
+    'feMerge',
+    ['result'],
+    [],
+    ['feMergeNode'],
+    '<feMerge result="merge"><feMergeNode in="SourceGraphic"/></feMerge>',
+  ),
   feElement('feMergeNode', ['in'], [], [], '<feMergeNode in="SourceGraphic"/>'),
   feElement(
     'feMorphology',
@@ -565,8 +582,7 @@ const DEFAULT_ATTR_VALUES: Record<string, string> = {
   specularConstant: '1',
   specularExponent: '20',
   preserveAspectRatio: 'xMidYMid meet',
-  values:
-    '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0',
+  values: '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0',
   order: '3',
   kernelMatrix: '0 0 0  0 1 0  0 0 0',
   radius: '2',

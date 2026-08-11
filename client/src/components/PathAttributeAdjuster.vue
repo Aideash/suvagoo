@@ -408,7 +408,6 @@ function penLabel(index: number): string {
           <AxisControl
             v-if="field.axis === 'x' || field.axis === 'y'"
             :label="field.label"
-            :axis="field.axis"
             :value="field.value"
             :default-min="defaultRangeForField(field).min"
             :default-max="defaultRangeForField(field).max"

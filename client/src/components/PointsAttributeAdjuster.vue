@@ -265,7 +265,6 @@ function moveSelected(delta: -1 | 1) {
       <template v-if="selectedPoint">
         <AxisControl
           label="X"
-          axis="x"
           :value="selectedPoint.x"
           :default-min="defaultXRange.min"
           :default-max="defaultXRange.max"
@@ -274,7 +273,6 @@ function moveSelected(delta: -1 | 1) {
         />
         <AxisControl
           label="Y"
-          axis="y"
           :value="selectedPoint.y"
           :default-min="defaultYRange.min"
           :default-max="defaultYRange.max"

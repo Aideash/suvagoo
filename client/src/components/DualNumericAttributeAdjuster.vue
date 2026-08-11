@@ -5,11 +5,7 @@ import {
   getAttributeSchema,
   viewBoxFromContent,
 } from '../lib/attributeSchema'
-import {
-  formatDualNumeric,
-  parseDualNumeric,
-  type DualNumeric,
-} from '../lib/dualNumericAttribute'
+import { formatDualNumeric, parseDualNumeric, type DualNumeric } from '../lib/dualNumericAttribute'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
 import AxisControl from './AxisControl.vue'
 
@@ -96,17 +92,12 @@ function onSeparateChange(event: Event) {
     </p>
 
     <label class="dual-numeric-adjuster__toggle">
-      <input
-        type="checkbox"
-        :checked="separateValues"
-        @change="onSeparateChange"
-      />
+      <input type="checkbox" :checked="separateValues" @change="onSeparateChange" />
       <span>Separate {{ labels.primary }} / {{ labels.secondary }} values</span>
     </label>
 
     <AxisControl
       :label="separateValues ? labels.primary : 'Value'"
-      axis="x"
       :value="primary"
       :default-min="defaultRange.min"
       :default-max="defaultRange.max"
@@ -118,7 +109,6 @@ function onSeparateChange(event: Event) {
     <AxisControl
       v-if="separateValues"
       :label="labels.secondary"
-      axis="y"
       :value="secondary"
       :default-min="defaultRange.min"
       :default-max="defaultRange.max"

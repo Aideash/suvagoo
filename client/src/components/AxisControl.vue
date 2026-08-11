@@ -1,21 +1,30 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { parseNumericValue } from '../lib/attributeSchema'
+import UnitSelect from './UnitSelect.vue'
 
-const props = defineProps<{
-  label: string
-  axis: 'x' | 'y'
-  value: number
-  defaultMin: number
-  defaultMax: number
-  defaultStep: number
-  /** When set, min is fixed and the min range field is hidden. */
-  fixedMin?: number
-}>()
+const props = withDefaults(
+  defineProps<{
+    label?: string
+    value: number
+    defaultMin: number
+    defaultMax: number
+    defaultStep: number
+    /** When set, min is fixed and the min range field is hidden. */
+    fixedMin?: number
+    /** Units the value may carry; '' is the unitless option. */
+    units?: readonly string[]
+    unit?: string
+  }>(),
+  { label: '', fixedMin: undefined, units: () => [''], unit: '' },
+)
 
 const emit = defineEmits<{
-  update: [value: number]
+  update: [value: number, unit: string]
 }>()
+
+const acceptsUnits = computed(() => props.units.length > 1)
+const hasUnitAffix = computed(() => acceptsUnits.value || props.unit !== '')
 
 const rangeMin = ref(0)
 const rangeMax = ref(100)
@@ -68,7 +77,7 @@ const slider = computed({
   },
   set(next: number) {
     const clamped = Math.max(effectiveRange.value.min, next)
-    emit('update', clamped)
+    emit('update', clamped, props.unit)
   },
 })
 
@@ -80,7 +89,9 @@ function onTextInput(event: Event) {
 function onTextEnter(event: KeyboardEvent) {
   isEditingText.value = false
   const parsed = parseNumericValue((event.target as HTMLInputElement).value)
-  if (parsed) emit('update', parsed.number)
+  if (!parsed) return
+  const typed = parsed.unit.trim()
+  emit('update', parsed.number, typed && acceptsUnits.value ? typed : props.unit)
 }
 
 function onTextBlur(event: FocusEvent) {
@@ -93,13 +104,22 @@ function nudge(delta: number) {
   const parsed = parseNumericValue(textDraft.value)
   const current = parsed?.number ?? props.value
   const next = Math.max(effectiveRange.value.min, current + delta * effectiveRange.value.step)
-  emit('update', next)
+  emit('update', next, props.unit)
 }
 
 function roundToNearestStep() {
   const parsed = parseNumericValue(textDraft.value)
   const current = parsed?.number ?? props.value
-  emit('update', Math.round(current / effectiveRange.value.step) * effectiveRange.value.step)
+  emit(
+    'update',
+    Math.round(current / effectiveRange.value.step) * effectiveRange.value.step,
+    props.unit,
+  )
+}
+
+function setUnit(unit: string) {
+  const parsed = parseNumericValue(textDraft.value)
+  emit('update', parsed?.number ?? props.value, unit)
 }
 
 function shiftUp(property: 'rangeMin' | 'rangeMax' | 'rangeStep') {
@@ -117,7 +137,6 @@ function shiftUp(property: 'rangeMin' | 'rangeMax' | 'rangeStep') {
 }
 
 function shiftDown(property: 'rangeMin' | 'rangeMax' | 'rangeStep') {
-  console.log('a')
   switch (property) {
     case 'rangeMin':
       rangeMin.value /= 10
@@ -132,7 +151,6 @@ function shiftDown(property: 'rangeMin' | 'rangeMax' | 'rangeStep') {
 }
 
 function invert(property: 'rangeMin' | 'rangeMax' | 'rangeStep') {
-  console.log('b')
   switch (property) {
     case 'rangeMin':
       rangeMin.value *= -1
@@ -161,7 +179,7 @@ function normalizeRange() {
 
 <template>
   <div class="axis-control">
-    <span class="axis-control__label">{{ label }}</span>
+    <span v-if="label" class="axis-control__label">{{ label }}</span>
     <input
       v-model.number="slider"
       type="range"
@@ -172,15 +190,26 @@ function normalizeRange() {
     />
     <div class="axis-control__stepper">
       <button type="button" class="axis-control__step-btn" @click="nudge(-1)">−</button>
-      <input
-        :value="textDraft"
-        type="text"
-        class="input axis-control__number"
-        @input="onTextInput"
-        @keydown.alt.enter.exact="roundToNearestStep"
-        @keydown.enter.exact="onTextEnter"
-        @blur="onTextBlur"
-      />
+      <span class="axis-control__field">
+        <input
+          :value="textDraft"
+          type="text"
+          class="input axis-control__number"
+          :class="{ 'axis-control__number--with-unit': hasUnitAffix }"
+          @input="onTextInput"
+          @keydown.alt.enter.exact="roundToNearestStep"
+          @keydown.enter.exact="onTextEnter"
+          @blur="onTextBlur"
+        />
+        <span v-if="hasUnitAffix" class="axis-control__unit">
+          <UnitSelect
+            :options="units"
+            :model-value="unit"
+            :label="label"
+            @update:model-value="setUnit"
+          />
+        </span>
+      </span>
       <button type="button" class="axis-control__step-btn" @click="nudge(1)">+</button>
     </div>
     <div
@@ -287,12 +316,32 @@ function normalizeRange() {
     }
   }
 
-  &__number {
+  &__field {
+    position: relative;
+    display: flex;
     flex: 1;
+    min-width: 0;
+  }
+
+  &__number {
+    width: 100%;
     min-width: 0;
     font-family: $font-mono;
     font-size: 0.8125rem;
     text-align: center;
+
+    &--with-unit {
+      padding-right: 2.5rem;
+    }
+  }
+
+  &__unit {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    display: flex;
+    align-items: center;
+    transform: translateY(-50%);
   }
 
   &__range-fields {
