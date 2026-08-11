@@ -1,10 +1,12 @@
 import {
+  DEFAULT_SNIPPET_MODE,
   defaultAttributeValue,
   formatPathSegment,
   getElementSchema,
   getSnippetForTag,
   normalizeTagName,
   parseViewBoxFromContent,
+  type SnippetMode,
   type ViewBox,
 } from './svgSchema'
 
@@ -606,7 +608,7 @@ export function insertAttribute(
     }
   }
 
-  const value = defaultAttributeValue(attrName, viewBox)
+  const value = defaultAttributeValue(attrName, viewBox, context.tagName)
   const insertion = ` ${attrName}="${value}"`
   const insertAt = context.openTagEnd - (openTag.endsWith('/>') ? 2 : 1)
   const next = content.slice(0, insertAt) + insertion + content.slice(insertAt)
@@ -614,16 +616,28 @@ export function insertAttribute(
   return { content: next, cursor }
 }
 
+/**
+ * Land the caret where the next edit is most likely to go: inside the open tag
+ * of a self-closing element, and between the tags of a container.
+ */
+function cursorInsideInsertedTag(content: string, start: number): number {
+  const tag = readTagAt(content, start)
+  if (!tag) return start
+  return tag.isSelfClosing ? tag.end - 2 : tag.end
+}
+
 export function insertChildElement(
   content: string,
   offset: number,
   childTag: string,
+  snippetMode: SnippetMode = DEFAULT_SNIPPET_MODE,
 ): EditResult | null {
   const context = findElementAtOffset(content, offset)
   if (!context) return null
 
   const schema = getElementSchema(context.tagName)
   const normalizedChild = normalizeTagName(childTag)
+  if (schema?.contentModel === 'empty') return null
   if (
     schema &&
     schema.children.length &&
@@ -633,10 +647,13 @@ export function insertChildElement(
   }
 
   const viewBox = parseViewBoxFromContent(content)
-  const snippet = getSnippetForTag(childTag, viewBox)
+  const snippet = getSnippetForTag(childTag, viewBox, snippetMode)
   const parentIndent = lineIndentAt(content, context.openTagStart)
   const childIndent = `${parentIndent}  `
-  const formatted = snippet.includes('\n') ? snippet : `${childIndent}${snippet}`
+  const formatted = snippet
+    .split('\n')
+    .map((line) => `${childIndent}${line}`)
+    .join('\n')
 
   const openTag = content.slice(context.openTagStart, context.openTagEnd)
   if (openTag.endsWith('/>')) {
@@ -644,18 +661,22 @@ export function insertChildElement(
     const replacementOpen = openTag.replace(/\/>$/, '>')
     const block = `${replacementOpen}\n${formatted}\n${parentIndent}</${tagName}>`
     const next = content.slice(0, context.openTagStart) + block + content.slice(context.openTagEnd)
-    const cursor = context.openTagStart + replacementOpen.length + 1
-    return { content: next, cursor }
+    const insertedAt = context.openTagStart + replacementOpen.length + 1 + childIndent.length
+    return { content: next, cursor: cursorInsideInsertedTag(next, insertedAt) }
   }
 
   const closeIndex = findMatchingCloseTag(content, context.tagName, context.openTagEnd)
   if (closeIndex == null) return null
 
-  const needsLeadingNewline = content[closeIndex - 1] !== '\n'
-  const insertion = `${needsLeadingNewline ? '\n' : ''}${formatted}\n${parentIndent}`
-  const next = content.slice(0, closeIndex) + insertion + content.slice(closeIndex)
-  const cursor = closeIndex + insertion.length - parentIndent.length
-  return { content: next, cursor: Math.max(0, cursor - 1) }
+  // Absorb the whitespace already sitting before the close tag, so repeated
+  // inserts do not leave a trail of blank lines behind.
+  let insertAt = closeIndex
+  while (insertAt > context.openTagEnd && /\s/.test(content[insertAt - 1])) insertAt -= 1
+
+  const insertion = `\n${formatted}\n${parentIndent}`
+  const next = content.slice(0, insertAt) + insertion + content.slice(closeIndex)
+  const insertedAt = insertAt + 1 + childIndent.length
+  return { content: next, cursor: cursorInsideInsertedTag(next, insertedAt) }
 }
 
 export function deleteAttribute(

@@ -5,20 +5,31 @@ export interface ViewBox {
   height: number
 }
 
+/**
+ * What an element is allowed to hold, which decides its bare form:
+ * `empty` writes `<path/>`, the other two write `<text></text>`.
+ */
+export type SvgContentModel = 'empty' | 'container' | 'text'
+
+/** Tag-only inserts a bare element; pre-filled inserts a worked example. */
+export type SnippetMode = 'tag-only' | 'pre-filled'
+
 export interface SvgElementSchema {
-  /** Lowercase tag name without namespace prefix. */
+  /** Tag name in its canonical casing, without namespace prefix. */
   tag: string
+  contentModel: SvgContentModel
   /** Shown first when not filtering; capped by COMMON_LIMIT in the UI. */
   commonAttributes: readonly string[]
   /** Full attribute list for search / "more" section. */
   attributes: readonly string[]
   /** Allowed child element tags; empty means text-only or leaf. */
   children: readonly string[]
-  /** Snippet inserted when clicking this element in the explorer. */
+  /** Snippet inserted in pre-filled mode. */
   snippet: string
 }
 
 export const EXPLORER_COMMON_LIMIT = 10
+export const DEFAULT_SNIPPET_MODE: SnippetMode = 'tag-only'
 export const DEFAULT_VIEWBOX: ViewBox = { minX: 0, minY: 0, width: 100, height: 100 }
 
 const GLOBAL_ATTRIBUTES = [
@@ -113,6 +124,8 @@ function feElement(
 ): SvgElementSchema {
   return {
     tag,
+    // Every filter primitive is either a leaf or holds only elements.
+    contentModel: children.length ? 'container' : 'empty',
     commonAttributes,
     attributes: [
       ...commonAttributes,
@@ -128,6 +141,7 @@ function feElement(
 const SVG_ELEMENTS: SvgElementSchema[] = [
   {
     tag: 'svg',
+    contentModel: 'container',
     commonAttributes: ['viewBox', 'width', 'height', 'xmlns', 'fill', 'stroke'],
     attributes: [
       'viewBox',
@@ -152,17 +166,23 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       'defs',
       ...GRAPHICAL_CHILDREN.filter((t) => t !== 'g'),
     ],
-    snippet: '<rect x="0" y="0" width="100" height="100" fill="#3b82f6"/>',
+    snippet: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="50" cy="50" r="25" fill="#3b82f6"/>
+</svg>`,
   },
   {
     tag: 'g',
+    contentModel: 'container',
     commonAttributes: ['transform', 'fill', 'stroke', 'opacity', 'clip-path'],
     attributes: [...GLOBAL_ATTRIBUTES],
     children: [...GRAPHICAL_CHILDREN],
-    snippet: '<g></g>',
+    snippet: `<g fill="#3b82f6">
+  <circle cx="50" cy="50" r="25"/>
+</g>`,
   },
   {
     tag: 'rect',
+    contentModel: 'empty',
     commonAttributes: ['x', 'y', 'width', 'height', 'rx', 'ry', 'fill', 'stroke'],
     attributes: ['x', 'y', 'width', 'height', 'rx', 'ry', ...GLOBAL_ATTRIBUTES],
     children: [],
@@ -170,6 +190,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
   {
     tag: 'circle',
+    contentModel: 'empty',
     commonAttributes: ['cx', 'cy', 'r', 'fill', 'stroke', 'stroke-width'],
     attributes: ['cx', 'cy', 'r', ...GLOBAL_ATTRIBUTES],
     children: [],
@@ -177,6 +198,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
   {
     tag: 'ellipse',
+    contentModel: 'empty',
     commonAttributes: ['cx', 'cy', 'rx', 'ry', 'fill', 'stroke'],
     attributes: ['cx', 'cy', 'rx', 'ry', ...GLOBAL_ATTRIBUTES],
     children: [],
@@ -184,6 +206,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
   {
     tag: 'line',
+    contentModel: 'empty',
     commonAttributes: ['x1', 'y1', 'x2', 'y2', 'stroke', 'stroke-width'],
     attributes: ['x1', 'y1', 'x2', 'y2', ...GLOBAL_ATTRIBUTES],
     children: [],
@@ -191,6 +214,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
   {
     tag: 'polyline',
+    contentModel: 'empty',
     commonAttributes: ['points', 'fill', 'stroke', 'stroke-width'],
     attributes: ['points', ...GLOBAL_ATTRIBUTES],
     children: [],
@@ -198,6 +222,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
   {
     tag: 'polygon',
+    contentModel: 'empty',
     commonAttributes: ['points', 'fill', 'stroke', 'stroke-width'],
     attributes: ['points', ...GLOBAL_ATTRIBUTES],
     children: [],
@@ -205,6 +230,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
   {
     tag: 'path',
+    contentModel: 'empty',
     commonAttributes: ['d', 'fill', 'stroke', 'stroke-width', 'fill-rule'],
     attributes: ['d', 'pathLength', 'fill-rule', 'clip-rule', ...GLOBAL_ATTRIBUTES],
     children: [],
@@ -212,6 +238,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
   {
     tag: 'text',
+    contentModel: 'text',
     commonAttributes: ['x', 'y', 'fill', 'font-size', 'font-family', 'text-anchor'],
     attributes: [
       'x',
@@ -233,6 +260,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
   {
     tag: 'tspan',
+    contentModel: 'text',
     commonAttributes: ['x', 'y', 'dx', 'dy', 'fill'],
     attributes: ['x', 'y', 'dx', 'dy', 'rotate', ...GLOBAL_ATTRIBUTES],
     children: [],
@@ -240,6 +268,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
   {
     tag: 'textPath',
+    contentModel: 'text',
     commonAttributes: ['href', 'startOffset', 'fill'],
     attributes: ['href', 'startOffset', 'method', 'spacing', ...GLOBAL_ATTRIBUTES],
     children: [],
@@ -247,13 +276,20 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
   {
     tag: 'defs',
+    contentModel: 'container',
     commonAttributes: ['id'],
     attributes: ['id', ...GLOBAL_ATTRIBUTES],
     children: [...DEFS_CHILDREN],
-    snippet: '<defs></defs>',
+    snippet: `<defs>
+  <linearGradient id="gradient-id" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="100" y2="0">
+    <stop offset="0%" stop-color="#3b82f6"/>
+    <stop offset="100%" stop-color="#8b5cf6"/>
+  </linearGradient>
+</defs>`,
   },
   {
     tag: 'use',
+    contentModel: 'empty',
     commonAttributes: ['href', 'x', 'y', 'width', 'height', 'fill'],
     attributes: ['href', 'x', 'y', 'width', 'height', ...GLOBAL_ATTRIBUTES],
     children: [],
@@ -261,13 +297,17 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
   {
     tag: 'symbol',
+    contentModel: 'container',
     commonAttributes: ['id', 'viewBox', 'width', 'height'],
     attributes: ['id', 'viewBox', 'width', 'height', 'preserveAspectRatio', ...GLOBAL_ATTRIBUTES],
     children: [...GRAPHICAL_CHILDREN],
-    snippet: '<symbol id="icon" viewBox="0 0 100 100"></symbol>',
+    snippet: `<symbol id="symbol-id" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="25" fill="#3b82f6"/>
+</symbol>`,
   },
   {
     tag: 'linearGradient',
+    contentModel: 'container',
     commonAttributes: ['id', 'x1', 'y1', 'x2', 'y2', 'gradientUnits'],
     attributes: [
       'id',
@@ -282,10 +322,15 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       ...GLOBAL_ATTRIBUTES,
     ],
     children: [...GRADIENT_CHILDREN],
-    snippet: '<linearGradient></linearGradient>',
+    // Stops need a gradient vector, and userSpaceOnUse keeps it in viewBox units.
+    snippet: `<linearGradient id="gradient-id" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="100" y2="0">
+  <stop offset="0%" stop-color="#3b82f6"/>
+  <stop offset="100%" stop-color="#8b5cf6"/>
+</linearGradient>`,
   },
   {
     tag: 'radialGradient',
+    contentModel: 'container',
     commonAttributes: ['id', 'cx', 'cy', 'r', 'fx', 'fy'],
     attributes: [
       'id',
@@ -301,10 +346,14 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       ...GLOBAL_ATTRIBUTES,
     ],
     children: [...GRADIENT_CHILDREN],
-    snippet: '<radialGradient></radialGradient>',
+    snippet: `<radialGradient id="gradient-id" gradientUnits="userSpaceOnUse" cx="50" cy="50" r="25">
+  <stop offset="0%" stop-color="#3b82f6"/>
+  <stop offset="100%" stop-color="#8b5cf6"/>
+</radialGradient>`,
   },
   {
     tag: 'stop',
+    contentModel: 'empty',
     commonAttributes: ['offset', 'stop-color', 'stop-opacity'],
     attributes: ['offset', 'stop-color', 'stop-opacity', ...GLOBAL_ATTRIBUTES],
     children: [],
@@ -312,13 +361,17 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   },
   {
     tag: 'clipPath',
+    contentModel: 'container',
     commonAttributes: ['id', 'clipPathUnits'],
     attributes: ['id', 'clipPathUnits', ...GLOBAL_ATTRIBUTES],
     children: [...GRAPHICAL_CHILDREN],
-    snippet: '<clipPath></clipPath>',
+    snippet: `<clipPath id="clip-id">
+  <circle cx="50" cy="50" r="25"/>
+</clipPath>`,
   },
   {
     tag: 'mask',
+    contentModel: 'container',
     commonAttributes: ['id', 'x', 'y', 'width', 'height', 'maskUnits'],
     attributes: [
       'id',
@@ -331,10 +384,14 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       ...GLOBAL_ATTRIBUTES,
     ],
     children: [...GRAPHICAL_CHILDREN],
-    snippet: '<mask></mask>',
+    // White keeps the masked area fully visible; darker values fade it out.
+    snippet: `<mask id="mask-id">
+  <rect width="100" height="100" fill="#ffffff"/>
+</mask>`,
   },
   {
     tag: 'filter',
+    contentModel: 'container',
     commonAttributes: ['id', 'x', 'y', 'width', 'height', 'filterUnits'],
     attributes: [
       'id',
@@ -348,15 +405,76 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       ...GLOBAL_ATTRIBUTES,
     ],
     children: [...FILTER_PRIMITIVE_CHILDREN],
-    snippet: '<filter id="filter-id"></filter>',
+    snippet: `<filter id="filter-id">
+  <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+</filter>`,
   },
   {
     tag: 'image',
+    contentModel: 'empty',
     commonAttributes: ['href', 'x', 'y', 'width', 'height', 'preserveAspectRatio'],
     attributes: ['href', 'x', 'y', 'width', 'height', 'preserveAspectRatio', ...GLOBAL_ATTRIBUTES],
     children: [],
     snippet:
       '<image href="" x="0" y="0" width="100" height="100" preserveAspectRatio="xMidYMid meet"/>',
+  },
+  {
+    tag: 'pattern',
+    contentModel: 'container',
+    commonAttributes: ['id', 'x', 'y', 'width', 'height', 'patternUnits'],
+    attributes: [
+      'id',
+      'x',
+      'y',
+      'width',
+      'height',
+      'patternUnits',
+      'patternContentUnits',
+      'patternTransform',
+      'viewBox',
+      'preserveAspectRatio',
+      'href',
+      ...GLOBAL_ATTRIBUTES,
+    ],
+    children: [...GRAPHICAL_CHILDREN],
+    snippet: `<pattern id="pattern-id" patternUnits="userSpaceOnUse" width="100" height="100">
+  <circle cx="50" cy="50" r="25" fill="#3b82f6"/>
+</pattern>`,
+  },
+  {
+    tag: 'marker',
+    contentModel: 'container',
+    commonAttributes: ['id', 'markerWidth', 'markerHeight', 'refX', 'refY', 'orient'],
+    attributes: [
+      'id',
+      'markerWidth',
+      'markerHeight',
+      'refX',
+      'refY',
+      'orient',
+      'markerUnits',
+      'viewBox',
+      'preserveAspectRatio',
+      'overflow',
+      ...GLOBAL_ATTRIBUTES,
+    ],
+    children: [...GRAPHICAL_CHILDREN],
+    // The viewBox lets the arrow be drawn in document units and scaled down to
+    // markerWidth/markerHeight, which are measured in stroke widths.
+    snippet: `<marker id="marker-id" viewBox="0 0 100 100" markerWidth="10" markerHeight="10" refX="50" refY="50" orient="auto">
+  <polygon points="10,90 50,10 90,90" fill="#3b82f6"/>
+</marker>`,
+  },
+  {
+    tag: 'foreignObject',
+    contentModel: 'container',
+    commonAttributes: ['x', 'y', 'width', 'height'],
+    attributes: ['x', 'y', 'width', 'height', ...GLOBAL_ATTRIBUTES],
+    // Holds HTML rather than SVG, so the explorer offers no child elements.
+    children: [],
+    snippet: `<foreignObject width="100" height="100">
+  <div xmlns="http://www.w3.org/1999/xhtml">Text</div>
+</foreignObject>`,
   },
   feElement(
     'feBlend',
@@ -377,7 +495,9 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     ['in', 'result'],
     [],
     [...FE_FUNC_CHILDREN],
-    '<feComponentTransfer in="SourceGraphic" result="transfer"><feFuncR type="identity"/></feComponentTransfer>',
+    `<feComponentTransfer in="SourceGraphic" result="transfer">
+  <feFuncR type="identity"/>
+</feComponentTransfer>`,
   ),
   feElement(
     'feComposite',
@@ -398,7 +518,9 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     ['in', 'surfaceScale', 'diffuseConstant', 'lighting-color', 'result'],
     [],
     [...FE_LIGHT_CHILDREN],
-    '<feDiffuseLighting in="SourceAlpha" surfaceScale="1" diffuseConstant="1" lighting-color="#ffffff" result="diffuse"><feDistantLight azimuth="45" elevation="45"/></feDiffuseLighting>',
+    `<feDiffuseLighting in="SourceAlpha" surfaceScale="1" diffuseConstant="1" lighting-color="#ffffff" result="diffuse">
+  <feDistantLight azimuth="45" elevation="45"/>
+</feDiffuseLighting>`,
   ),
   feElement(
     'feDisplacementMap',
@@ -440,7 +562,9 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     ['result'],
     [],
     ['feMergeNode'],
-    '<feMerge result="merge"><feMergeNode in="SourceGraphic"/></feMerge>',
+    `<feMerge result="merge">
+  <feMergeNode in="SourceGraphic"/>
+</feMerge>`,
   ),
   feElement('feMergeNode', ['in'], [], [], '<feMergeNode in="SourceGraphic"/>'),
   feElement(
@@ -462,7 +586,9 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     ['in', 'surfaceScale', 'specularConstant', 'specularExponent', 'lighting-color', 'result'],
     [],
     [...FE_LIGHT_CHILDREN],
-    '<feSpecularLighting in="SourceAlpha" surfaceScale="1" specularConstant="1" specularExponent="20" lighting-color="#ffffff" result="specular"><fePointLight x="50" y="50" z="200"/></feSpecularLighting>',
+    `<feSpecularLighting in="SourceAlpha" surfaceScale="1" specularConstant="1" specularExponent="20" lighting-color="#ffffff" result="specular">
+  <fePointLight x="50" y="50" z="200"/>
+</feSpecularLighting>`,
   ),
   feElement('feTile', ['in', 'result'], [], [], '<feTile in="SourceGraphic" result="tile"/>'),
   feElement(
@@ -543,6 +669,8 @@ const VIEWBOX_NUMERIC_ATTRS = new Set([
   'fy',
   'dx',
   'dy',
+  'refX',
+  'refY',
 ])
 
 const DEFAULT_ATTR_VALUES: Record<string, string> = {
@@ -577,6 +705,15 @@ const DEFAULT_ATTR_VALUES: Record<string, string> = {
   yChannelSelector: 'G',
   filterUnits: 'objectBoundingBox',
   primitiveUnits: 'userSpaceOnUse',
+  gradientUnits: 'userSpaceOnUse',
+  clipPathUnits: 'userSpaceOnUse',
+  maskUnits: 'userSpaceOnUse',
+  patternUnits: 'userSpaceOnUse',
+  spreadMethod: 'pad',
+  markerWidth: '10',
+  markerHeight: '10',
+  markerUnits: 'strokeWidth',
+  orient: 'auto',
   surfaceScale: '1',
   diffuseConstant: '1',
   specularConstant: '1',
@@ -611,7 +748,14 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
-export function viewBoxValueForAttribute(name: string, viewBox: ViewBox): string | null {
+/** Elements whose x/y is an anchor point rather than a top-left corner. */
+const ANCHORED_POSITION_TAGS = new Set(['text', 'tspan', 'textPath', 'fePointLight', 'feSpotLight'])
+
+export function viewBoxValueForAttribute(
+  name: string,
+  viewBox: ViewBox,
+  tag?: string,
+): string | null {
   if (!VIEWBOX_NUMERIC_ATTRS.has(name) && name !== 'points' && name !== 'd' && name !== 'viewBox') {
     return null
   }
@@ -626,16 +770,19 @@ export function viewBoxValueForAttribute(name: string, viewBox: ViewBox): string
   const outerX = minX + width * 0.9
   const outerY = minY + height * 0.9
   const quarter = Math.min(width, height) / 4
+  const anchored = tag ? ANCHORED_POSITION_TAGS.has(normalizeTagName(tag)) : false
 
   switch (name) {
     case 'viewBox':
-      return `${formatNumber(minX)} ${formatNumber(minY)} ${formatNumber(width)} ${formatNumber(height)}`
+      return formatViewBoxValue(viewBox)
     case 'x':
+      return formatNumber(anchored ? midX : insetX)
     case 'x1':
       return formatNumber(insetX)
     case 'x2':
       return formatNumber(outerX)
     case 'y':
+      return formatNumber(anchored ? midY : insetY)
     case 'y1':
       return formatNumber(insetY)
     case 'y2':
@@ -646,9 +793,11 @@ export function viewBoxValueForAttribute(name: string, viewBox: ViewBox): string
       return formatNumber(height)
     case 'cx':
     case 'fx':
+    case 'refX':
       return formatNumber(clamp(midX, minX, maxX))
     case 'cy':
     case 'fy':
+    case 'refY':
       return formatNumber(clamp(midY, minY, maxY))
     case 'r':
       return formatNumber(clamp(quarter, 0, Math.min(width, height) / 2))
@@ -668,24 +817,34 @@ export function viewBoxValueForAttribute(name: string, viewBox: ViewBox): string
   }
 }
 
+/** Parse a viewBox attribute value (`min-x min-y width height`). */
+export function parseViewBoxValue(value: string): ViewBox | null {
+  const parts = value
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map((part) => Number(part))
+  if (parts.length !== 4 || !parts.every((part) => Number.isFinite(part))) return null
+  return {
+    minX: parts[0],
+    minY: parts[1],
+    width: Math.max(0, parts[2]),
+    height: Math.max(0, parts[3]),
+  }
+}
+
+export function formatViewBoxValue(viewBox: ViewBox): string {
+  return `${formatNumber(viewBox.minX)} ${formatNumber(viewBox.minY)} ${formatNumber(viewBox.width)} ${formatNumber(viewBox.height)}`
+}
+
 export function parseViewBoxFromContent(content: string): ViewBox {
   const svgOpen = content.match(/<svg\b[^>]*>/i)?.[0]
   if (!svgOpen) return DEFAULT_VIEWBOX
 
   const viewBoxMatch = svgOpen.match(/\bviewBox\s*=\s*["']([^"']+)["']/i)
   if (viewBoxMatch) {
-    const parts = viewBoxMatch[1]
-      .trim()
-      .split(/[\s,]+/)
-      .map((part) => Number(part))
-    if (parts.length === 4 && parts.every((part) => Number.isFinite(part))) {
-      return {
-        minX: parts[0],
-        minY: parts[1],
-        width: Math.max(0, parts[2]),
-        height: Math.max(0, parts[3]),
-      }
-    }
+    const parsed = parseViewBoxValue(viewBoxMatch[1])
+    if (parsed) return parsed
   }
 
   const widthMatch = svgOpen.match(/\bwidth\s*=\s*["']([^"']+)["']/i)
@@ -699,31 +858,53 @@ export function parseViewBoxFromContent(content: string): ViewBox {
   return DEFAULT_VIEWBOX
 }
 
-export function defaultAttributeValue(name: string, viewBox: ViewBox = DEFAULT_VIEWBOX): string {
-  const viewBoxValue = viewBoxValueForAttribute(name, viewBox)
+export function defaultAttributeValue(
+  name: string,
+  viewBox: ViewBox = DEFAULT_VIEWBOX,
+  tag?: string,
+): string {
+  const viewBoxValue = viewBoxValueForAttribute(name, viewBox, tag)
   if (viewBoxValue != null) return viewBoxValue
   return DEFAULT_ATTR_VALUES[name] ?? '...'
 }
 
-function applyViewBoxToSnippet(snippet: string, tagName: string, viewBox: ViewBox): string {
-  const schema = getElementSchema(tagName)
-  if (!schema) return snippet
+const OPEN_TAG = /<([A-Za-z][\w:.-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/g
+const ATTRIBUTE = /([A-Za-z][\w:.-]*)(\s*=\s*)(["'])([^"']*)\3/g
 
-  let result = snippet
-  for (const attr of [...schema.commonAttributes, ...schema.attributes]) {
-    const value = defaultAttributeValue(attr, viewBox)
-    if (value === '...') continue
-    const escaped = attr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    result = result.replace(new RegExp(`(\\b${escaped}\\s*=\\s*")([^"]*)(")`, 'i'), `$1${value}$3`)
-    result = result.replace(new RegExp(`(\\b${escaped}\\s*=\\s*')([^']*)(')`, 'i'), `$1${value}$3`)
-  }
-  return result
+/**
+ * Rescale a snippet's geometry to the document's viewBox. Every tag in the
+ * snippet is handled against its own schema, so nested example children land in
+ * the same coordinate space as the element they sit in. Values that carry no
+ * geometry (ids, colours, enumerations) are left as authored.
+ */
+function applyViewBoxToSnippet(snippet: string, viewBox: ViewBox): string {
+  return snippet.replace(OPEN_TAG, (tag, tagName: string, attrs: string, selfClosing: string) => {
+    const schema = getElementSchema(tagName)
+    if (!schema) return tag
+
+    const known = new Set([...schema.commonAttributes, ...schema.attributes])
+    const scaled = attrs.replace(ATTRIBUTE, (attr, name: string, eq, quote) => {
+      if (!known.has(name)) return attr
+      const scaledValue = viewBoxValueForAttribute(name, viewBox, tagName)
+      return scaledValue == null ? attr : `${name}${eq}${quote}${scaledValue}${quote}`
+    })
+    return `<${tagName}${scaled}${selfClosing}>`
+  })
 }
 
-export function getSnippetForTag(tagName: string, viewBox: ViewBox = DEFAULT_VIEWBOX): string {
+function bareTag(tag: string, contentModel: SvgContentModel): string {
+  return contentModel === 'empty' ? `<${tag}/>` : `<${tag}></${tag}>`
+}
+
+export function getSnippetForTag(
+  tagName: string,
+  viewBox: ViewBox = DEFAULT_VIEWBOX,
+  mode: SnippetMode = DEFAULT_SNIPPET_MODE,
+): string {
   const schema = getElementSchema(tagName)
-  if (!schema) return `<${normalizeTagName(tagName)}/>`
-  return applyViewBoxToSnippet(schema.snippet, tagName, viewBox)
+  if (!schema) return bareTag(tagName.trim(), 'empty')
+  if (mode === 'tag-only') return bareTag(schema.tag, schema.contentModel)
+  return applyViewBoxToSnippet(schema.snippet, viewBox)
 }
 
 export function uniqueSorted(values: readonly string[]): string[] {

@@ -17,6 +17,7 @@ import AxisControl from './AxisControl.vue'
 import PointsAttributeAdjuster from './PointsAttributeAdjuster.vue'
 import PathAttributeAdjuster from './PathAttributeAdjuster.vue'
 import DualNumericAttributeAdjuster from './DualNumericAttributeAdjuster.vue'
+import ViewBoxAttributeAdjuster from './ViewBoxAttributeAdjuster.vue'
 
 const props = defineProps<{
   attribute: AttributeContext
@@ -306,6 +307,12 @@ function onEnumChange(event: Event) {
       v-else-if="schema.kind === 'dual-number'"
       :attribute="attribute"
       :content="content"
+      @update="commit"
+    />
+
+    <ViewBoxAttributeAdjuster
+      v-else-if="schema.kind === 'viewBox'"
+      :attribute="attribute"
       @update="commit"
     />
 

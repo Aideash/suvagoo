@@ -19,9 +19,11 @@ import {
 } from '../lib/svgDocument'
 import { parsePoints } from '../lib/pointsAttribute'
 import { parsePathD } from '../lib/pathAttribute'
+import { useSnippetMode } from '../composables/useSnippetMode'
 
 const route = useRoute()
 const router = useRouter()
+const { snippetMode } = useSnippetMode()
 
 const isEditing = computed(() => Boolean(route.params.id))
 const name = ref('Untitled SVG')
@@ -143,7 +145,7 @@ function cancel() {
 
 function onInsertChild(tagName: string) {
   builderError.value = ''
-  const result = insertChildElement(content.value, cursorOffset.value, tagName)
+  const result = insertChildElement(content.value, cursorOffset.value, tagName, snippetMode.value)
   if (!result) {
     builderError.value = `Could not insert <${tagName}> at the cursor.`
     return

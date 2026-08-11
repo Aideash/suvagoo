@@ -20,6 +20,7 @@ import {
   type PathSegment,
 } from '../lib/svgDocument'
 import SvgAttributeAdjuster from './SvgAttributeAdjuster.vue'
+import { useSnippetMode } from '../composables/useSnippetMode'
 
 const props = defineProps<{
   content: string
@@ -42,6 +43,8 @@ const emit = defineEmits<{
     },
   ]
 }>()
+
+const { isPreFilled, toggleSnippetMode } = useSnippetMode()
 
 const filter = ref('')
 const deleteMode = ref(false)
@@ -326,9 +329,34 @@ function onAttributeUpdate(value: string) {
         Place the cursor inside an SVG element to see available inserts.
       </p>
 
-      <section v-if="flatTree.length" class="svg-explorer__section">
-        <h3 class="svg-explorer__heading">Document</h3>
-        <ul class="svg-explorer__tree">
+      <section class="svg-explorer__section">
+        <div class="svg-explorer__section-header">
+          <h3 class="svg-explorer__heading">Document</h3>
+          <div class="svg-explorer__snippet-mode">
+            <span class="svg-explorer__snippet-mode-label">
+              {{ isPreFilled ? 'Pre-filled' : 'Tag only' }}
+            </span>
+            <button
+              type="button"
+              class="svg-explorer__snippet-track"
+              role="switch"
+              :aria-checked="isPreFilled"
+              aria-label="Insert pre-filled snippets"
+              :title="
+                isPreFilled
+                  ? 'Inserting worked examples — switch to bare tags'
+                  : 'Inserting bare tags — switch to pre-filled snippets'
+              "
+              @click="toggleSnippetMode"
+            >
+              <span
+                class="svg-explorer__snippet-thumb"
+                :class="{ 'svg-explorer__snippet-thumb--filled': isPreFilled }"
+              />
+            </button>
+          </div>
+        </div>
+        <ul v-if="flatTree.length" class="svg-explorer__tree">
           <li
             v-for="row in flatTree"
             :key="row.node.path.map((segment) => `${segment.tag}:${segment.index}`).join('/')"
@@ -468,6 +496,42 @@ function onAttributeUpdate(value: string) {
 <style scoped lang="scss">
 @use '../styles/variables' as *;
 
+@mixin switch-track($width, $height) {
+  position: relative;
+  width: $width;
+  height: $height;
+  padding: 0;
+  border: 1px solid $color-border;
+  border-radius: 999px;
+  background: $color-bg;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+
+  &:hover {
+    border-color: var(--border-strong);
+  }
+
+  &:focus-visible {
+    outline: 2px solid $color-accent;
+    outline-offset: 2px;
+  }
+}
+
+@mixin switch-thumb($size) {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: $size;
+  height: $size;
+  border-radius: 50%;
+  transition:
+    transform 0.15s ease,
+    background 0.15s;
+}
+
 .svg-explorer {
   display: flex;
   flex-direction: column;
@@ -535,27 +599,7 @@ function onAttributeUpdate(value: string) {
   }
 
   &__mode-track {
-    position: relative;
-    width: 36px;
-    height: 20px;
-    padding: 0;
-    border: 1px solid $color-border;
-    border-radius: 999px;
-    background: $color-bg;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition:
-      background 0.15s,
-      border-color 0.15s;
-
-    &:hover {
-      border-color: var(--border-strong);
-    }
-
-    &:focus-visible {
-      outline: 2px solid $color-accent;
-      outline-offset: 2px;
-    }
+    @include switch-track(36px, 20px);
   }
 
   &--delete &__mode-track {
@@ -564,16 +608,8 @@ function onAttributeUpdate(value: string) {
   }
 
   &__mode-thumb {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
+    @include switch-thumb(14px);
     background: $color-accent;
-    transition:
-      transform 0.15s ease,
-      background 0.15s;
 
     &--delete {
       transform: translateX(16px);
@@ -595,6 +631,43 @@ function onAttributeUpdate(value: string) {
 
   &__section {
     margin-bottom: $spacing-md;
+  }
+
+  &__section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $spacing-sm;
+  }
+
+  &__snippet-mode {
+    display: flex;
+    align-items: center;
+    gap: $spacing-xs;
+    margin-bottom: $spacing-xs;
+  }
+
+  &__snippet-mode-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+    white-space: nowrap;
+  }
+
+  &__snippet-track {
+    @include switch-track(32px, 18px);
+  }
+
+  &__snippet-thumb {
+    @include switch-thumb(12px);
+    background: $color-text-muted;
+
+    &--filled {
+      transform: translateX(16px);
+      background: $color-accent;
+    }
   }
 
   &__heading {

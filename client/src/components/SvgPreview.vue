@@ -1085,6 +1085,7 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
 
     &--dragging {
       cursor: grabbing;
+      opacity: 0.5;
       fill: color-mix(in srgb, $color-accent 40%, var(--bg-raised));
     }
 

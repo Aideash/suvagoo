@@ -10,6 +10,7 @@ export type AttributeKind =
   | 'points'
   | 'path'
   | 'dual-number'
+  | 'viewBox'
   | 'text'
 
 export interface DualNumberLabels {
@@ -269,6 +270,9 @@ export function getAttributeSchema(name: string): AttributeSchema {
   if (normalized === 'd') {
     return { kind: 'path' }
   }
+  if (normalized === 'viewbox') {
+    return { kind: 'viewBox' }
+  }
 
   return { kind: 'text' }
 }
@@ -516,6 +520,26 @@ export function dualNumericRangeForAttribute(
   }
 
   return { min: 0, max: span / 2, step }
+}
+
+export type ViewBoxField = 'minX' | 'minY' | 'width' | 'height'
+
+/** Default AxisControl ranges for each viewBox component, derived from a snapshot. */
+export function viewBoxFieldRange(
+  field: ViewBoxField,
+  viewBox: ViewBox,
+): { min: number; max: number; step: number } {
+  const span = Math.max(viewBox.width, viewBox.height, 1)
+  switch (field) {
+    case 'minX':
+      return { min: viewBox.minX - span, max: viewBox.minX + span * 2, step: 1 }
+    case 'minY':
+      return { min: viewBox.minY - span, max: viewBox.minY + span * 2, step: 1 }
+    case 'width':
+      return { min: 0, max: Math.max(viewBox.width * 2, span), step: 1 }
+    case 'height':
+      return { min: 0, max: Math.max(viewBox.height * 2, span), step: 1 }
+  }
 }
 
 export function viewBoxFromContent(content: string): ViewBox {
