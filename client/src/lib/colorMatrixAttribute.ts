@@ -1,6 +1,13 @@
 import { formatNumericValue, parseNumericValue } from './attributeSchema'
 
-export type ColorMatrixType = 'matrix' | 'saturate' | 'hueRotate' | 'luminanceToAlpha'
+export const COLOR_MATRIX_TYPES = [
+  'matrix',
+  'saturate',
+  'hueRotate',
+  'luminanceToAlpha',
+] as const
+
+export type ColorMatrixType = (typeof COLOR_MATRIX_TYPES)[number]
 
 export const IDENTITY_COLOR_MATRIX: readonly number[] = [
   1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0,

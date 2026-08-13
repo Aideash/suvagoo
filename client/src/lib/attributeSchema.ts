@@ -1,3 +1,4 @@
+import { COLOR_MATRIX_TYPES } from './colorMatrixAttribute'
 import { parseViewBoxFromContent, type ViewBox } from './svgSchema'
 
 export type AttributeKind =
@@ -205,6 +206,18 @@ const ENUM_ATTRS: Record<string, readonly string[]> = {
   spacing: ['auto', 'exact'],
 }
 
+const TURBULENCE_TYPES: readonly string[] = ['fractalNoise', 'turbulence']
+
+const TRANSFER_FUNCTION_TYPES: readonly string[] = [
+  'identity',
+  'table',
+  'discrete',
+  'linear',
+  'gamma',
+]
+
+const FE_FUNC_TAGS = new Set(['fefuncr', 'fefuncg', 'fefuncb', 'fefunca'])
+
 export interface ParsedNumeric {
   number: number
   unit: string
@@ -235,6 +248,18 @@ function enumSchemaFor(name: string): AttributeSchema | null {
 export function getAttributeSchema(name: string, tagName?: string): AttributeSchema {
   const normalized = name.toLowerCase()
   const tag = tagName ? tagName.toLowerCase() : ''
+
+  if (normalized === 'type') {
+    if (tag === 'fecolormatrix') {
+      return { kind: 'enum', enumValues: COLOR_MATRIX_TYPES }
+    }
+    if (tag === 'feturbulence') {
+      return { kind: 'enum', enumValues: TURBULENCE_TYPES }
+    }
+    if (FE_FUNC_TAGS.has(tag)) {
+      return { kind: 'enum', enumValues: TRANSFER_FUNCTION_TYPES }
+    }
+  }
 
   if (COLOR_ATTRS.has(normalized)) {
     return { kind: 'color' }
