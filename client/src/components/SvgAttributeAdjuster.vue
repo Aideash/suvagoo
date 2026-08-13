@@ -1,19 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import {
-  formatColor,
   formatNumericValue,
   getAttributeSchema,
   numericRangeForAttribute,
-  parseColor,
-  parseColorAlpha,
-  parseColorToHex,
   parseNumericValue,
   unitsForAttribute,
   viewBoxFromContent,
 } from '../lib/attributeSchema'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
 import AxisControl from './AxisControl.vue'
+import ColorAttributeAdjuster from './ColorAttributeAdjuster.vue'
 import PointsAttributeAdjuster from './PointsAttributeAdjuster.vue'
 import PathAttributeAdjuster from './PathAttributeAdjuster.vue'
 import DualNumericAttributeAdjuster from './DualNumericAttributeAdjuster.vue'
@@ -89,47 +86,6 @@ const lengthUnits = computed(() => unitsForAttribute(props.attribute.attrName))
 /** Falls through to the raw text input while the value is not a plain number. */
 const showAxisControl = computed(() => isLengthKind.value && parsedNumeric.value != null)
 
-const colorHex = computed({
-  get() {
-    return parseColorToHex(draft.value) ?? '#000000'
-  },
-  set(hex: string) {
-    const parsed = parseColor(draft.value)
-    const rgb = parseColor(hex)
-    if (!rgb) return
-    commit(
-      formatColor({
-        r: rgb.r,
-        g: rgb.g,
-        b: rgb.b,
-        a: parsed?.a ?? 1,
-      }),
-    )
-  },
-})
-
-const colorAlpha = computed({
-  get() {
-    return parseColorAlpha(draft.value)
-  },
-  set(next: number) {
-    const parsed = parseColor(draft.value)
-    if (!parsed) return
-    commit(formatColor({ ...parsed, a: next }))
-  },
-})
-
-const colorAlphaPercent = computed({
-  get() {
-    return Math.round(colorAlpha.value * 100)
-  },
-  set(next: number) {
-    colorAlpha.value = next / 100
-  },
-})
-
-const showColorAlpha = computed(() => parseColor(draft.value) != null)
-
 const opacitySlider = computed({
   get() {
     const parsed = parseNumericValue(draft.value)
@@ -193,44 +149,11 @@ function onEnumChange(event: Event) {
       <span class="attr-adjuster__value-preview">{{ attribute.value }}</span>
     </p>
 
-    <div v-if="schema.kind === 'color'" class="attr-adjuster__controls">
-      <label class="attr-adjuster__color-row">
-        <input
-          v-model="colorHex"
-          type="color"
-          class="attr-adjuster__color-input"
-          :title="`Pick color for ${attribute.attrName}`"
-        />
-        <input
-          v-model="draft"
-          type="text"
-          class="input attr-adjuster__text"
-          spellcheck="false"
-          @change="commitDraft"
-          @keydown.enter="commitDraft"
-        />
-      </label>
-      <label v-if="showColorAlpha" class="attr-adjuster__alpha-row">
-        <span class="attr-adjuster__alpha-label">Alpha</span>
-        <input
-          v-model.number="colorAlpha"
-          type="range"
-          class="attr-adjuster__slider attr-adjuster__alpha-slider"
-          min="0"
-          max="1"
-          step="0.01"
-        />
-        <input
-          v-model.number="colorAlphaPercent"
-          type="number"
-          class="input attr-adjuster__alpha-number"
-          min="0"
-          max="100"
-          step="1"
-        />
-        <span class="attr-adjuster__alpha-unit">%</span>
-      </label>
-    </div>
+    <ColorAttributeAdjuster
+      v-if="schema.kind === 'color'"
+      :attribute="attribute"
+      @update="commit"
+    />
 
     <div v-else-if="schema.kind === 'enum'" class="attr-adjuster__controls">
       <select class="input attr-adjuster__select" :value="draft" @change="onEnumChange">
@@ -398,64 +321,6 @@ function onEnumChange(event: Event) {
     display: flex;
     flex-direction: column;
     gap: $spacing-sm;
-  }
-
-  &__color-row {
-    display: flex;
-    align-items: center;
-    gap: $spacing-sm;
-  }
-
-  &__alpha-row {
-    display: grid;
-    grid-template-columns: auto 1fr 3.5rem auto;
-    align-items: center;
-    gap: $spacing-xs;
-  }
-
-  &__alpha-label {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: $color-text-muted;
-  }
-
-  &__alpha-slider {
-    min-width: 0;
-  }
-
-  &__alpha-number {
-    width: 100%;
-    font-family: $font-mono;
-    font-size: 0.75rem;
-    text-align: right;
-    padding-right: 0;
-  }
-
-  &__alpha-unit {
-    font-size: 0.75rem;
-    color: $color-text-muted;
-  }
-
-  &__color-input {
-    flex-shrink: 0;
-    width: 36px;
-    height: 28px;
-    padding: 2px;
-    border: 1px solid $color-border;
-    border-radius: $radius-sm;
-    background: $color-bg;
-    cursor: pointer;
-
-    &::-webkit-color-swatch-wrapper {
-      padding: 0;
-    }
-
-    &::-webkit-color-swatch {
-      border: 0;
-      border-radius: 2px;
-    }
   }
 
   &__text,

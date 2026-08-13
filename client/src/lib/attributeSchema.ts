@@ -461,7 +461,19 @@ export function parseColor(value: string): ParsedColor | null {
 
 const namedColorCache = new Map<string, ParsedColor | null>()
 
-const NON_RESOLVABLE_COLORS = new Set(['none', 'currentcolor', 'inherit', 'initial', 'unset'])
+/**
+ * Values with no concrete colour to edit. `transparent` is here even though the
+ * browser resolves it, because treating it as rgba(0,0,0,0) makes the picker
+ * hand back an alpha-0 colour that paints nothing.
+ */
+const NON_RESOLVABLE_COLORS = new Set([
+  'none',
+  'currentcolor',
+  'transparent',
+  'inherit',
+  'initial',
+  'unset',
+])
 
 /** Resolve named CSS colors, hsl(), etc. via the browser's parser. */
 function resolveBrowserColor(value: string): ParsedColor | null {
