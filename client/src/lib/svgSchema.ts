@@ -677,6 +677,7 @@ const DEFAULT_ATTR_VALUES: Record<string, string> = {
   transform: 'none',
   gradientTransform: 'none',
   patternTransform: 'none',
+  filter: 'none',
   fill: '#3b82f6',
   stroke: '#000000',
   'stroke-width': '2',

@@ -8,6 +8,7 @@ import {
   unitsForAttribute,
   viewBoxFromContent,
 } from '../lib/attributeSchema'
+import { collectDocumentIds, suggestIdReferences } from '../lib/idReferences'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
 import AxisControl from './AxisControl.vue'
 import ColorAttributeAdjuster from './ColorAttributeAdjuster.vue'
@@ -17,6 +18,9 @@ import DualNumericAttributeAdjuster from './DualNumericAttributeAdjuster.vue'
 import ViewBoxAttributeAdjuster from './ViewBoxAttributeAdjuster.vue'
 import ColorMatrixValuesAdjuster from './ColorMatrixValuesAdjuster.vue'
 import TransformAttributeAdjuster from './TransformAttributeAdjuster.vue'
+import FilterAttributeAdjuster from './FilterAttributeAdjuster.vue'
+import IdReferenceOption from './IdReferenceOption.vue'
+import ValueSuggestInput from './ValueSuggestInput.vue'
 
 const props = defineProps<{
   attribute: AttributeContext
@@ -31,10 +35,27 @@ const emit = defineEmits<{
   selectCommand: [index: number | null]
 }>()
 
+const SUGGESTION_LIMIT = 5
+
 const draft = ref(props.attribute.value)
+const caret = ref(props.attribute.value.length)
+const textInput = ref<{ setCaret: (offset: number) => void }>()
 
 const schema = computed(() => getAttributeSchema(props.attribute.attrName, props.attribute.tagName))
 const viewBox = computed(() => viewBoxFromContent(props.content))
+
+/** Parsed once here and shared with the adjusters that offer `url(#…)` completion. */
+const documentIds = computed(() => collectDocumentIds(props.content))
+
+const idSuggestions = computed(() =>
+  suggestIdReferences(
+    draft.value,
+    caret.value,
+    documentIds.value,
+    props.attribute.attrName,
+    SUGGESTION_LIMIT,
+  ),
+)
 const isLengthKind = computed(
   () => schema.value.kind === 'length' || schema.value.kind === 'number',
 )
@@ -112,7 +133,15 @@ const percentageSlider = computed({
 
 function commit(value: string) {
   draft.value = value
+  caret.value = value.length
   emit('update', value)
+}
+
+function applyIdSuggestion(suggestion: { value: string; caret: number }) {
+  draft.value = suggestion.value
+  caret.value = suggestion.caret
+  emit('update', suggestion.value)
+  textInput.value?.setCaret(suggestion.caret)
 }
 
 function commitDraft() {
@@ -152,6 +181,7 @@ function onEnumChange(event: Event) {
     <ColorAttributeAdjuster
       v-if="schema.kind === 'color'"
       :attribute="attribute"
+      :document-ids="documentIds"
       @update="commit"
     />
 
@@ -255,6 +285,13 @@ function onEnumChange(event: Event) {
       @update="commit"
     />
 
+    <FilterAttributeAdjuster
+      v-else-if="schema.kind === 'filter'"
+      :attribute="attribute"
+      :document-ids="documentIds"
+      @update="commit"
+    />
+
     <AxisControl
       v-else-if="showAxisControl"
       :value="parsedNumeric?.number ?? 0"
@@ -267,14 +304,19 @@ function onEnumChange(event: Event) {
     />
 
     <div v-else class="attr-adjuster__controls">
-      <input
+      <ValueSuggestInput
+        ref="textInput"
         v-model="draft"
-        type="text"
-        class="input attr-adjuster__text"
-        spellcheck="false"
-        @change="commitDraft"
-        @keydown.enter="commitDraft"
-      />
+        :suggestions="idSuggestions"
+        :aria-label="`${attribute.attrName} value`"
+        @update:caret="caret = $event"
+        @commit="commitDraft"
+        @select="applyIdSuggestion"
+      >
+        <template #option="{ suggestion }">
+          <IdReferenceOption :id="suggestion.id" :tag="suggestion.tag" />
+        </template>
+      </ValueSuggestInput>
     </div>
   </section>
 </template>
@@ -323,7 +365,6 @@ function onEnumChange(event: Event) {
     gap: $spacing-sm;
   }
 
-  &__text,
   &__select,
   &__number {
     width: 100%;

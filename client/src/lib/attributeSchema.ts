@@ -14,6 +14,7 @@ export type AttributeKind =
   | 'viewBox'
   | 'color-matrix-values'
   | 'transform'
+  | 'filter'
   | 'text'
 
 export interface DualNumberLabels {
@@ -310,6 +311,9 @@ export function getAttributeSchema(name: string, tagName?: string): AttributeSch
     normalized === 'patterntransform'
   ) {
     return { kind: 'transform' }
+  }
+  if (normalized === 'filter') {
+    return { kind: 'filter' }
   }
 
   return { kind: 'text' }

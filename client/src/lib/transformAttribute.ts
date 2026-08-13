@@ -483,7 +483,6 @@ export function updateFunctionValueAt(
   const values = [...fn.values]
   // Extend if editing optional params (e.g. rotate cx/cy, translate tz).
   while (values.length <= valueIndex) {
-    const meta = TRANSFORM_FUNCTION_META[fn.type]
     const fill =
       fn.type === 'scale' || fn.type.startsWith('scale')
         ? 1

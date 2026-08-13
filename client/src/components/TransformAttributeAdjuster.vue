@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { formatNumericValue, numericRangeForAttribute, viewBoxFromContent } from '../lib/attributeSchema'
+import {
+  formatNumericValue,
+  numericRangeForAttribute,
+  viewBoxFromContent,
+} from '../lib/attributeSchema'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
 import {
   ANGLE_TRANSFORM_RANGE,
@@ -107,7 +111,7 @@ const paramFields = computed((): ParamField[] => {
 
   for (let i = 0; i < count && i < labels.length; i++) {
     const label = labels[i]
-    let kind: ParamField['kind'] = 'translate'
+    let kind: ParamField['kind']
     if (label === 'angle' || label === 'ax' || label === 'ay') kind = 'angle'
     else if (label.startsWith('s')) kind = 'scale'
     else if (label === 'cx' || label === 'cy' || label.startsWith('t')) kind = 'translate'
@@ -350,9 +354,7 @@ function formatMatrixCell(n: number): string {
           class="transform-adjuster__op-btn"
           title="Move function later"
           :disabled="
-            selectedIndex == null ||
-            !parsedFunctions ||
-            selectedIndex >= parsedFunctions.length - 1
+            selectedIndex == null || !parsedFunctions || selectedIndex >= parsedFunctions.length - 1
           "
           @click="moveSelected(1)"
         >
@@ -426,6 +428,7 @@ function formatMatrixCell(n: number): string {
   display: flex;
   flex-direction: column;
   gap: $spacing-sm;
+  padding-bottom: 100%;
 
   &__text {
     width: 100%;
