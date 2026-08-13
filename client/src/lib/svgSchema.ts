@@ -49,6 +49,9 @@ const GLOBAL_ATTRIBUTES = [
   'clip-path',
   'mask',
   'filter',
+  'marker-start',
+  'marker-mid',
+  'marker-end',
   'display',
   'visibility',
   'pointer-events',
@@ -184,7 +187,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     tag: 'rect',
     contentModel: 'empty',
     commonAttributes: ['x', 'y', 'width', 'height', 'rx', 'ry', 'fill', 'stroke'],
-    attributes: ['x', 'y', 'width', 'height', 'rx', 'ry', ...GLOBAL_ATTRIBUTES],
+    attributes: ['x', 'y', 'width', 'height', 'rx', 'ry', 'fill-rule', ...GLOBAL_ATTRIBUTES],
     children: [],
     snippet: '<rect x="0" y="0" width="100" height="100" fill="#3b82f6"/>',
   },
@@ -192,7 +195,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     tag: 'circle',
     contentModel: 'empty',
     commonAttributes: ['cx', 'cy', 'r', 'fill', 'stroke', 'stroke-width'],
-    attributes: ['cx', 'cy', 'r', ...GLOBAL_ATTRIBUTES],
+    attributes: ['cx', 'cy', 'r', 'fill-rule', ...GLOBAL_ATTRIBUTES],
     children: [],
     snippet: '<circle cx="50" cy="50" r="25" fill="#3b82f6"/>',
   },
@@ -200,7 +203,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     tag: 'ellipse',
     contentModel: 'empty',
     commonAttributes: ['cx', 'cy', 'rx', 'ry', 'fill', 'stroke'],
-    attributes: ['cx', 'cy', 'rx', 'ry', ...GLOBAL_ATTRIBUTES],
+    attributes: ['cx', 'cy', 'rx', 'ry', 'fill-rule', ...GLOBAL_ATTRIBUTES],
     children: [],
     snippet: '<ellipse cx="50" cy="50" rx="40" ry="25" fill="#3b82f6"/>',
   },
@@ -208,23 +211,23 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     tag: 'line',
     contentModel: 'empty',
     commonAttributes: ['x1', 'y1', 'x2', 'y2', 'stroke', 'stroke-width'],
-    attributes: ['x1', 'y1', 'x2', 'y2', ...GLOBAL_ATTRIBUTES],
+    attributes: ['x1', 'y1', 'x2', 'y2', 'fill-rule', ...GLOBAL_ATTRIBUTES],
     children: [],
     snippet: '<line x1="10" y1="10" x2="90" y2="90" stroke="#3b82f6" stroke-width="2"/>',
   },
   {
     tag: 'polyline',
     contentModel: 'empty',
-    commonAttributes: ['points', 'fill', 'stroke', 'stroke-width'],
-    attributes: ['points', ...GLOBAL_ATTRIBUTES],
+    commonAttributes: ['points', 'fill', 'stroke', 'stroke-width', 'fill-rule'],
+    attributes: ['points', 'fill-rule', ...GLOBAL_ATTRIBUTES],
     children: [],
     snippet: '<polyline points="10,80 50,20 90,80" fill="none" stroke="#3b82f6" stroke-width="2"/>',
   },
   {
     tag: 'polygon',
     contentModel: 'empty',
-    commonAttributes: ['points', 'fill', 'stroke', 'stroke-width'],
-    attributes: ['points', ...GLOBAL_ATTRIBUTES],
+    commonAttributes: ['points', 'fill', 'stroke', 'stroke-width', 'fill-rule'],
+    attributes: ['points', 'fill-rule', ...GLOBAL_ATTRIBUTES],
     children: [],
     snippet: '<polygon points="50,10 90,90 10,90" fill="#3b82f6"/>',
   },
@@ -253,6 +256,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       'font-weight',
       'text-anchor',
       'dominant-baseline',
+      'fill-rule',
       ...GLOBAL_ATTRIBUTES,
     ],
     children: ['tspan', 'textPath'],
@@ -262,7 +266,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     tag: 'tspan',
     contentModel: 'text',
     commonAttributes: ['x', 'y', 'dx', 'dy', 'fill'],
-    attributes: ['x', 'y', 'dx', 'dy', 'rotate', ...GLOBAL_ATTRIBUTES],
+    attributes: ['x', 'y', 'dx', 'dy', 'rotate', 'fill-rule', ...GLOBAL_ATTRIBUTES],
     children: [],
     snippet: '<tspan x="50" dy="1.2em">Line</tspan>',
   },
@@ -270,7 +274,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     tag: 'textPath',
     contentModel: 'text',
     commonAttributes: ['href', 'startOffset', 'fill'],
-    attributes: ['href', 'startOffset', 'method', 'spacing', ...GLOBAL_ATTRIBUTES],
+    attributes: ['href', 'startOffset', 'method', 'spacing', 'fill-rule', ...GLOBAL_ATTRIBUTES],
     children: [],
     snippet: '<textPath href="#my-path">Text on path</textPath>',
   },
@@ -669,8 +673,6 @@ const VIEWBOX_NUMERIC_ATTRS = new Set([
   'fy',
   'dx',
   'dy',
-  'refX',
-  'refY',
 ])
 
 const DEFAULT_ATTR_VALUES: Record<string, string> = {
@@ -681,6 +683,7 @@ const DEFAULT_ATTR_VALUES: Record<string, string> = {
   fill: '#3b82f6',
   stroke: '#000000',
   'stroke-width': '2',
+  'fill-rule': 'nonzero',
   opacity: '0.8',
   xmlns: 'http://www.w3.org/2000/svg',
   href: '#id',
@@ -714,10 +717,12 @@ const DEFAULT_ATTR_VALUES: Record<string, string> = {
   maskUnits: 'userSpaceOnUse',
   patternUnits: 'userSpaceOnUse',
   spreadMethod: 'pad',
-  markerWidth: '10',
-  markerHeight: '10',
+  markerWidth: '3',
+  markerHeight: '3',
   markerUnits: 'strokeWidth',
   orient: 'auto',
+  refX: '0',
+  refY: '0',
   surfaceScale: '1',
   diffuseConstant: '1',
   specularConstant: '1',
@@ -797,11 +802,9 @@ export function viewBoxValueForAttribute(
       return formatNumber(height)
     case 'cx':
     case 'fx':
-    case 'refX':
       return formatNumber(clamp(midX, minX, maxX))
     case 'cy':
     case 'fy':
-    case 'refY':
       return formatNumber(clamp(midY, minY, maxY))
     case 'r':
       return formatNumber(clamp(quarter, 0, Math.min(width, height) / 2))

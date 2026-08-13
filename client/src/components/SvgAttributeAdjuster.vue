@@ -24,6 +24,7 @@ import ColorMatrixValuesAdjuster from './ColorMatrixValuesAdjuster.vue'
 import TransformAttributeAdjuster from './TransformAttributeAdjuster.vue'
 import FilterAttributeAdjuster from './FilterAttributeAdjuster.vue'
 import PreserveAspectRatioAttributeAdjuster from './PreserveAspectRatioAttributeAdjuster.vue'
+import OrientAttributeAdjuster from './OrientAttributeAdjuster.vue'
 import IdReferenceOption from './IdReferenceOption.vue'
 import ValueSuggestInput from './ValueSuggestInput.vue'
 
@@ -180,6 +181,14 @@ function nudge(delta: number) {
 function onEnumChange(event: Event) {
   commit((event.target as HTMLSelectElement).value)
 }
+
+const isBinaryEnum = computed(
+  () => schema.value.kind === 'enum' && (schema.value.enumValues?.length ?? 0) === 2,
+)
+
+function setEnumValue(value: string) {
+  commit(value)
+}
 </script>
 
 <template>
@@ -196,6 +205,28 @@ function onEnumChange(event: Event) {
       :document-ids="documentIds"
       @update="commit"
     />
+
+    <div v-else-if="schema.kind === 'enum' && isBinaryEnum" class="attr-adjuster__controls">
+      <div class="attr-adjuster__seg-group" role="group" :aria-label="attribute.attrName">
+        <button
+          v-for="option in schema.enumValues"
+          :key="option"
+          type="button"
+          class="attr-adjuster__seg"
+          :class="{ 'attr-adjuster__seg--selected': draft === option }"
+          :aria-pressed="draft === option"
+          @click="setEnumValue(option)"
+        >
+          {{ option }}
+        </button>
+      </div>
+      <p
+        v-if="schema.enumValues && !schema.enumValues.includes(draft)"
+        class="attr-adjuster__custom"
+      >
+        Current: <code>{{ draft }}</code> (custom)
+      </p>
+    </div>
 
     <div v-else-if="schema.kind === 'enum'" class="attr-adjuster__controls">
       <select class="input attr-adjuster__select" :value="draft" @change="onEnumChange">
@@ -306,6 +337,12 @@ function onEnumChange(event: Event) {
 
     <PreserveAspectRatioAttributeAdjuster
       v-else-if="schema.kind === 'preserveAspectRatio'"
+      :attribute="attribute"
+      @update="commit"
+    />
+
+    <OrientAttributeAdjuster
+      v-else-if="schema.kind === 'orient'"
       :attribute="attribute"
       @update="commit"
     />
@@ -443,6 +480,50 @@ function onEnumChange(event: Event) {
     &:hover {
       border-color: $color-accent;
       color: $color-accent;
+    }
+  }
+
+  &__seg-group {
+    display: flex;
+    gap: $spacing-xs;
+  }
+
+  &__seg {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3rem 0.55rem;
+    border: 1px solid $color-border;
+    border-radius: $radius-sm;
+    background: $color-bg;
+    font-family: $font-mono;
+    font-size: 0.75rem;
+    color: $color-text;
+    cursor: pointer;
+    transition:
+      border-color 0.12s,
+      background 0.12s,
+      color 0.12s;
+
+    &:hover {
+      border-color: $color-accent;
+    }
+
+    &--selected {
+      border-color: $color-accent;
+      background: color-mix(in srgb, $color-accent 12%, $color-bg);
+      color: $color-accent;
+    }
+  }
+
+  &__custom {
+    margin: 0;
+    font-size: 0.75rem;
+    color: $color-text-muted;
+
+    code {
+      font-family: $font-mono;
     }
   }
 }

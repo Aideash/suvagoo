@@ -16,6 +16,7 @@ export type AttributeKind =
   | 'transform'
   | 'filter'
   | 'preserveAspectRatio'
+  | 'orient'
   | 'text'
 
 export interface DualNumberLabels {
@@ -88,6 +89,10 @@ const LENGTH_ATTRS = new Set([
   'targetx',
   'targety',
   'limitingconeangle',
+  'markerwidth',
+  'markerheight',
+  'refx',
+  'refy',
 ])
 
 /** Subset of LENGTH_ATTRS that accepts a CSS unit; the rest are user-space numbers. */
@@ -112,6 +117,10 @@ const CSS_LENGTH_ATTRS = new Set([
   'stroke-width',
   'font-size',
   'textlength',
+  'markerwidth',
+  'markerheight',
+  'refx',
+  'refy',
 ])
 
 const DUAL_NUMBER_ATTRS = new Set(['stddeviation', 'basefrequency'])
@@ -181,6 +190,8 @@ const ENUM_ATTRS: Record<string, readonly string[]> = {
   clipPathUnits: ['objectBoundingBox', 'userSpaceOnUse'],
   filterUnits: ['objectBoundingBox', 'userSpaceOnUse'],
   primitiveUnits: ['objectBoundingBox', 'userSpaceOnUse'],
+  markerUnits: ['strokeWidth', 'userSpaceOnUse'],
+  overflow: ['visible', 'hidden', 'scroll', 'auto'],
   mode: [
     'normal',
     'multiply',
@@ -319,6 +330,9 @@ export function getAttributeSchema(name: string, tagName?: string): AttributeSch
   if (normalized === 'preserveaspectratio') {
     return { kind: 'preserveAspectRatio' }
   }
+  if (normalized === 'orient') {
+    return { kind: 'orient' }
+  }
 
   return { kind: 'text' }
 }
@@ -379,6 +393,13 @@ export function numericRangeForAttribute(
     case 'stroke-width':
     case 'font-size':
       return { min: 0, max: span / 2, step: 0.5 }
+    case 'markerwidth':
+    case 'markerheight':
+      return { min: 0, max: Math.max(20, span / 5), step: 0.5 }
+    case 'refx':
+      return { min: viewBox.minX - span, max: viewBox.minX + span * 2, step: baseStep }
+    case 'refy':
+      return { min: viewBox.minY - span, max: viewBox.minY + span * 2, step: baseStep }
     case 'dx':
     case 'dy':
       return { min: -span, max: span, step: baseStep }
