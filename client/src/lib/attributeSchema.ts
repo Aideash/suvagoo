@@ -17,6 +17,7 @@ export type AttributeKind =
   | 'filter'
   | 'preserveAspectRatio'
   | 'orient'
+  | 'stroke-dasharray'
   | 'text'
 
 export interface DualNumberLabels {
@@ -332,6 +333,9 @@ export function getAttributeSchema(name: string, tagName?: string): AttributeSch
   }
   if (normalized === 'orient') {
     return { kind: 'orient' }
+  }
+  if (normalized === 'stroke-dasharray') {
+    return { kind: 'stroke-dasharray', units: CSS_LENGTH_UNITS }
   }
 
   return { kind: 'text' }

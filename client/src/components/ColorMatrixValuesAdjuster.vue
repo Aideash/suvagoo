@@ -17,11 +17,7 @@ import {
   type ColorMatrixType,
 } from '../lib/colorMatrixAttribute'
 import { formatNumericValue } from '../lib/attributeSchema'
-import {
-  attributeIdentity,
-  findElementByPath,
-  type AttributeContext,
-} from '../lib/svgDocument'
+import { attributeIdentity, findElementByPath, type AttributeContext } from '../lib/svgDocument'
 import AxisControl from './AxisControl.vue'
 import NumericGroupControl from './NumericGroupControl.vue'
 
@@ -135,8 +131,7 @@ function onMatrixFieldUpdate(fieldId: string, value: number) {
 }
 
 function onScalarUpdate(value: number) {
-  const step =
-    matrixType.value === 'hueRotate' ? HUE_ROTATE_RANGE.step : SATURATE_RANGE.step
+  const step = matrixType.value === 'hueRotate' ? HUE_ROTATE_RANGE.step : SATURATE_RANGE.step
   const snapped = snapMatrixCoeff(value, step)
   scalarValue.value = snapped
   emit('update', formatNumericValue(snapped, ''))

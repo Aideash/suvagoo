@@ -153,9 +153,10 @@ function parseNumberToken(raw: string): number | null {
   const trimmed = raw.trim()
   if (!trimmed) return null
   // Strip common CSS units; store unitless user units / degrees.
-  const match = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)(?:px|pt|em|rem|%|deg|rad|turn|grad)?$/i.exec(
-    trimmed,
-  )
+  const match =
+    /^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)(?:px|pt|em|rem|%|deg|rad|turn|grad)?$/i.exec(
+      trimmed,
+    )
   if (!match) return null
   const n = Number.parseFloat(match[1])
   return Number.isFinite(n) ? n : null
@@ -301,9 +302,7 @@ export function presentTypes(functions: TransformFunction[]): Set<TransformFunct
  * - omit already-present types
  * - while a composite is present, hide its components
  */
-export function availableAddFunctions(
-  functions: TransformFunction[],
-): TransformFunctionType[] {
+export function availableAddFunctions(functions: TransformFunction[]): TransformFunctionType[] {
   const present = presentTypes(functions)
   const hiddenComponents = new Set<TransformFunctionType>()
   for (const group of COMPOSITE_GROUPS) {
@@ -449,10 +448,7 @@ export function addFunction(
   return { functions: next, selectedIndex: next.length - 1 }
 }
 
-export function removeFunction(
-  functions: TransformFunction[],
-  index: number,
-): TransformFunction[] {
+export function removeFunction(functions: TransformFunction[], index: number): TransformFunction[] {
   if (index < 0 || index >= functions.length) return functions
   return functions.filter((_, i) => i !== index)
 }

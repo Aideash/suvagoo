@@ -25,6 +25,7 @@ import TransformAttributeAdjuster from './TransformAttributeAdjuster.vue'
 import FilterAttributeAdjuster from './FilterAttributeAdjuster.vue'
 import PreserveAspectRatioAttributeAdjuster from './PreserveAspectRatioAttributeAdjuster.vue'
 import OrientAttributeAdjuster from './OrientAttributeAdjuster.vue'
+import StrokeDashArrayAttributeAdjuster from './StrokeDashArrayAttributeAdjuster.vue'
 import IdReferenceOption from './IdReferenceOption.vue'
 import ValueSuggestInput from './ValueSuggestInput.vue'
 
@@ -343,6 +344,12 @@ function setEnumValue(value: string) {
 
     <OrientAttributeAdjuster
       v-else-if="schema.kind === 'orient'"
+      :attribute="attribute"
+      @update="commit"
+    />
+
+    <StrokeDashArrayAttributeAdjuster
+      v-else-if="schema.kind === 'stroke-dasharray'"
       :attribute="attribute"
       @update="commit"
     />

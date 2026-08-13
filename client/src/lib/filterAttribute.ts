@@ -2,13 +2,7 @@
 
 import { formatNumericValue, parseColor, parseNumericValue } from './attributeSchema'
 
-export type FilterSoloType =
-  | 'none'
-  | 'initial'
-  | 'inherit'
-  | 'revert'
-  | 'revert-layer'
-  | 'unset'
+export type FilterSoloType = 'none' | 'initial' | 'inherit' | 'revert' | 'revert-layer' | 'unset'
 
 export type FilterFunctionType =
   | FilterSoloType
@@ -69,7 +63,14 @@ export function isFilterReference(type: FilterFunctionType): boolean {
 }
 
 export const FILTER_FUNCTION_META: Record<FilterFunctionType, FilterFunctionMeta> = {
-  none: { hint: 'None', minArgs: 0, maxArgs: 0, paramLabels: [], defaultArity: 0, paramKind: 'solo' },
+  none: {
+    hint: 'None',
+    minArgs: 0,
+    maxArgs: 0,
+    paramLabels: [],
+    defaultArity: 0,
+    paramKind: 'solo',
+  },
   initial: {
     hint: 'Initial',
     minArgs: 0,
@@ -220,7 +221,16 @@ const TYPE_BY_LOWER = new Map<string, FilterFunctionType>(
   (Object.keys(FILTER_FUNCTION_META) as FilterFunctionType[]).map((t) => [t.toLowerCase(), t]),
 )
 
-export const FILTER_LENGTH_UNITS: readonly string[] = ['px', '', 'em', 'rem', 'pt', 'cm', 'mm', 'in']
+export const FILTER_LENGTH_UNITS: readonly string[] = [
+  'px',
+  '',
+  'em',
+  'rem',
+  'pt',
+  'cm',
+  'mm',
+  'in',
+]
 export const FILTER_AMOUNT_UNITS: readonly string[] = ['', '%']
 export const FILTER_ANGLE_UNITS: readonly string[] = ['deg', 'rad', 'turn', 'grad']
 
@@ -337,10 +347,7 @@ function parseDropShadowArgs(argsRaw: string): { values: FilterArg[]; color?: st
   return color != null ? { values, color } : { values }
 }
 
-function parseSimpleArgs(
-  argsRaw: string,
-  meta: FilterFunctionMeta,
-): FilterArg[] | null {
+function parseSimpleArgs(argsRaw: string, meta: FilterFunctionMeta): FilterArg[] | null {
   const tokens = argsRaw.length === 0 ? [] : argsRaw.split(/[\s,]+/).filter(Boolean)
   if (tokens.length < meta.minArgs || tokens.length > meta.maxArgs) return null
   const values: FilterArg[] = []
@@ -549,11 +556,7 @@ export function updateFunctionValueAt(
   const values = [...fn.values]
   while (values.length <= valueIndex) {
     const unit =
-      fn.type === 'hue-rotate'
-        ? 'deg'
-        : fn.type === 'blur' || fn.type === 'drop-shadow'
-          ? 'px'
-          : ''
+      fn.type === 'hue-rotate' ? 'deg' : fn.type === 'blur' || fn.type === 'drop-shadow' ? 'px' : ''
     const number =
       fn.type === 'brightness' ||
       fn.type === 'contrast' ||

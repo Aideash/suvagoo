@@ -1,11 +1,6 @@
 import { formatNumericValue, parseNumericValue } from './attributeSchema'
 
-export const COLOR_MATRIX_TYPES = [
-  'matrix',
-  'saturate',
-  'hueRotate',
-  'luminanceToAlpha',
-] as const
+export const COLOR_MATRIX_TYPES = ['matrix', 'saturate', 'hueRotate', 'luminanceToAlpha'] as const
 
 export type ColorMatrixType = (typeof COLOR_MATRIX_TYPES)[number]
 
@@ -35,7 +30,10 @@ export function normalizeColorMatrixType(raw: string | undefined | null): ColorM
 }
 
 function parseNumberTokens(value: string): number[] | null {
-  const tokens = value.trim().split(/[\s,]+/).filter(Boolean)
+  const tokens = value
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean)
   if (!tokens.length) return null
   const numbers: number[] = []
   for (const token of tokens) {
@@ -69,10 +67,7 @@ export function formatColorMatrixNumbers(values: readonly number[]): string {
   return parts.join(' ')
 }
 
-export function parseColorMatrixValues(
-  value: string,
-  type: ColorMatrixType,
-): number[] | null {
+export function parseColorMatrixValues(value: string, type: ColorMatrixType): number[] | null {
   if (type === 'luminanceToAlpha') {
     const trimmed = value.trim()
     if (!trimmed) return []

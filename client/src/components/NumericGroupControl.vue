@@ -85,8 +85,7 @@ watch(
 )
 
 watch(
-  () =>
-    [props.defaultRange.min, props.defaultRange.max, props.defaultRange.step] as const,
+  () => [props.defaultRange.min, props.defaultRange.max, props.defaultRange.step] as const,
   ([min, max, step], previous) => {
     if (previous !== undefined) {
       const [pMin, pMax, pStep] = previous
@@ -149,10 +148,7 @@ function rowIndexForField(index: number): number {
       </template>
 
       <template v-for="(field, index) in fields" :key="field.id">
-        <span
-          v-if="showHeaders && index % columns === 0"
-          class="numeric-group__row-label"
-        >
+        <span v-if="showHeaders && index % columns === 0" class="numeric-group__row-label">
           {{ rowLabels?.[rowIndexForField(index)] ?? '' }}
         </span>
         <label
