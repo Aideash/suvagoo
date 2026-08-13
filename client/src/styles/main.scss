@@ -188,6 +188,14 @@ button.ghost {
     outline: none;
     border-color: var(--accent-dim);
   }
+
+  &--warn {
+    border-color: var(--amber);
+
+    &:focus {
+      border-color: var(--amber);
+    }
+  }
 }
 
 .page-header {

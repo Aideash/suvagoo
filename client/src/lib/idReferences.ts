@@ -1,4 +1,9 @@
-import { parseIndexedDocument, type IndexedDocumentNode } from './svgDocument'
+import {
+  parseIndexedDocument,
+  pathsEqual,
+  type IndexedDocumentNode,
+  type PathSegment,
+} from './svgDocument'
 import { getElementSchema } from './svgSchema'
 
 /** An `id` defined somewhere in the document, with the element that owns it. */
@@ -60,6 +65,34 @@ export function collectDocumentIds(content: string): DocumentId[] {
   const root = parseIndexedDocument(content)
   if (root) walk(root)
   return found
+}
+
+/**
+ * Another element already claiming `id`, if any. Pass `excludePath` for the
+ * element currently being edited so its own value does not count as a conflict.
+ */
+export function findDocumentIdConflict(
+  content: string,
+  id: string,
+  excludePath?: PathSegment[],
+): DocumentId | null {
+  const needle = id.trim()
+  if (!needle) return null
+
+  function walk(node: IndexedDocumentNode): DocumentId | null {
+    const nodeId = node.attributes.id?.trim()
+    if (nodeId === needle && (!excludePath || !pathsEqual(node.path, excludePath))) {
+      return { id: nodeId, tag: getElementSchema(node.tag)?.tag ?? node.tag }
+    }
+    for (const child of node.children) {
+      const found = walk(child)
+      if (found) return found
+    }
+    return null
+  }
+
+  const root = parseIndexedDocument(content)
+  return root ? walk(root) : null
 }
 
 /** Shortest completion first so typing narrows towards the obvious match. */

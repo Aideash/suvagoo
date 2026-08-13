@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import {
   formatNumericValue,
   getAttributeSchema,
@@ -8,7 +8,11 @@ import {
   unitsForAttribute,
   viewBoxFromContent,
 } from '../lib/attributeSchema'
-import { collectDocumentIds, suggestIdReferences } from '../lib/idReferences'
+import {
+  collectDocumentIds,
+  findDocumentIdConflict,
+  suggestIdReferences,
+} from '../lib/idReferences'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
 import AxisControl from './AxisControl.vue'
 import ColorAttributeAdjuster from './ColorAttributeAdjuster.vue'
@@ -41,6 +45,7 @@ const SUGGESTION_LIMIT = 5
 const draft = ref(props.attribute.value)
 const caret = ref(props.attribute.value.length)
 const textInput = ref<{ setCaret: (offset: number) => void }>()
+const idWarnId = useId()
 
 const schema = computed(() => getAttributeSchema(props.attribute.attrName, props.attribute.tagName))
 const viewBox = computed(() => viewBoxFromContent(props.content))
@@ -57,6 +62,12 @@ const idSuggestions = computed(() =>
     SUGGESTION_LIMIT,
   ),
 )
+
+/** Another element already owns this id — warn while editing the `id` attribute. */
+const idConflict = computed(() => {
+  if (props.attribute.attrName !== 'id') return null
+  return findDocumentIdConflict(props.content, draft.value, props.attribute.path)
+})
 const isLengthKind = computed(
   () => schema.value.kind === 'length' || schema.value.kind === 'number',
 )
@@ -315,7 +326,10 @@ function onEnumChange(event: Event) {
         ref="textInput"
         v-model="draft"
         :suggestions="idSuggestions"
+        :class="{ 'input--warn': !!idConflict }"
         :aria-label="`${attribute.attrName} value`"
+        :aria-invalid="idConflict ? true : undefined"
+        :aria-describedby="idConflict ? idWarnId : undefined"
         @update:caret="caret = $event"
         @commit="commitDraft"
         @select="applyIdSuggestion"
@@ -324,6 +338,9 @@ function onEnumChange(event: Event) {
           <IdReferenceOption :id="suggestion.id" :tag="suggestion.tag" />
         </template>
       </ValueSuggestInput>
+      <p v-if="idConflict" :id="idWarnId" class="attr-adjuster__warn" role="status">
+        Already used on <code>&lt;{{ idConflict.tag }}&gt;</code>
+      </p>
     </div>
   </section>
 </template>
@@ -370,6 +387,16 @@ function onEnumChange(event: Event) {
     display: flex;
     flex-direction: column;
     gap: $spacing-sm;
+  }
+
+  &__warn {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--amber);
+
+    code {
+      font-family: $font-mono;
+    }
   }
 
   &__select,
