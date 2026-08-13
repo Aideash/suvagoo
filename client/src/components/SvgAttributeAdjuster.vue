@@ -19,6 +19,7 @@ import PathAttributeAdjuster from './PathAttributeAdjuster.vue'
 import DualNumericAttributeAdjuster from './DualNumericAttributeAdjuster.vue'
 import ViewBoxAttributeAdjuster from './ViewBoxAttributeAdjuster.vue'
 import ColorMatrixValuesAdjuster from './ColorMatrixValuesAdjuster.vue'
+import TransformAttributeAdjuster from './TransformAttributeAdjuster.vue'
 
 const props = defineProps<{
   attribute: AttributeContext
@@ -319,6 +320,13 @@ function onEnumChange(event: Event) {
 
     <ColorMatrixValuesAdjuster
       v-else-if="schema.kind === 'color-matrix-values'"
+      :attribute="attribute"
+      :content="content"
+      @update="commit"
+    />
+
+    <TransformAttributeAdjuster
+      v-else-if="schema.kind === 'transform'"
       :attribute="attribute"
       :content="content"
       @update="commit"

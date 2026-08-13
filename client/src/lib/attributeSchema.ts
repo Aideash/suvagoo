@@ -12,6 +12,7 @@ export type AttributeKind =
   | 'dual-number'
   | 'viewBox'
   | 'color-matrix-values'
+  | 'transform'
   | 'text'
 
 export interface DualNumberLabels {
@@ -277,6 +278,13 @@ export function getAttributeSchema(name: string, tagName?: string): AttributeSch
   }
   if (normalized === 'values' && tag === 'fecolormatrix') {
     return { kind: 'color-matrix-values' }
+  }
+  if (
+    normalized === 'transform' ||
+    normalized === 'gradienttransform' ||
+    normalized === 'patterntransform'
+  ) {
+    return { kind: 'transform' }
   }
 
   return { kind: 'text' }
