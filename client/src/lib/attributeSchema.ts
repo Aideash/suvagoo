@@ -192,6 +192,8 @@ const ENUM_ATTRS: Record<string, readonly string[]> = {
   filterUnits: ['objectBoundingBox', 'userSpaceOnUse'],
   primitiveUnits: ['objectBoundingBox', 'userSpaceOnUse'],
   markerUnits: ['strokeWidth', 'userSpaceOnUse'],
+  patternUnits: ['objectBoundingBox', 'userSpaceOnUse'],
+  patternContentUnits: ['objectBoundingBox', 'userSpaceOnUse'],
   overflow: ['visible', 'hidden', 'scroll', 'auto'],
   mode: [
     'normal',
