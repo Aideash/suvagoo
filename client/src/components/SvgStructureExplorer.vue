@@ -330,32 +330,7 @@ function onAttributeUpdate(value: string) {
       </p>
 
       <section class="svg-explorer__section">
-        <div class="svg-explorer__section-header">
-          <h3 class="svg-explorer__heading">Document</h3>
-          <div class="svg-explorer__snippet-mode">
-            <span class="svg-explorer__snippet-mode-label">
-              {{ isPreFilled ? 'Pre-filled' : 'Tag only' }}
-            </span>
-            <button
-              type="button"
-              class="svg-explorer__snippet-track"
-              role="switch"
-              :aria-checked="isPreFilled"
-              aria-label="Insert pre-filled snippets"
-              :title="
-                isPreFilled
-                  ? 'Inserting worked examples — switch to bare tags'
-                  : 'Inserting bare tags — switch to pre-filled snippets'
-              "
-              @click="toggleSnippetMode"
-            >
-              <span
-                class="svg-explorer__snippet-thumb"
-                :class="{ 'svg-explorer__snippet-thumb--filled': isPreFilled }"
-              />
-            </button>
-          </div>
-        </div>
+        <h3 class="svg-explorer__heading">Document</h3>
         <ul v-if="flatTree.length" class="svg-explorer__tree">
           <li
             v-for="row in flatTree"
@@ -425,7 +400,32 @@ function onAttributeUpdate(value: string) {
 
       <template v-else>
         <section v-if="schema?.children.length" class="svg-explorer__section">
-          <h3 class="svg-explorer__heading">Child elements</h3>
+          <div class="svg-explorer__section-header">
+            <h3 class="svg-explorer__heading">Child elements</h3>
+            <div class="svg-explorer__snippet-mode">
+              <span class="svg-explorer__snippet-mode-label">
+                {{ isPreFilled ? 'Pre-filled' : 'Tag only' }}
+              </span>
+              <button
+                type="button"
+                class="svg-explorer__snippet-track"
+                role="switch"
+                :aria-checked="isPreFilled"
+                aria-label="Insert pre-filled snippets"
+                :title="
+                  isPreFilled
+                    ? 'Inserting worked examples — switch to bare tags'
+                    : 'Inserting bare tags — switch to pre-filled snippets'
+                "
+                @click="toggleSnippetMode"
+              >
+                <span
+                  class="svg-explorer__snippet-thumb"
+                  :class="{ 'svg-explorer__snippet-thumb--filled': isPreFilled }"
+                />
+              </button>
+            </div>
+          </div>
           <div class="svg-explorer__chips">
             <button
               v-for="tag in visibleInsertChildren"
