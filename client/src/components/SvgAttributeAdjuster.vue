@@ -19,6 +19,7 @@ import ViewBoxAttributeAdjuster from './ViewBoxAttributeAdjuster.vue'
 import ColorMatrixValuesAdjuster from './ColorMatrixValuesAdjuster.vue'
 import TransformAttributeAdjuster from './TransformAttributeAdjuster.vue'
 import FilterAttributeAdjuster from './FilterAttributeAdjuster.vue'
+import PreserveAspectRatioAttributeAdjuster from './PreserveAspectRatioAttributeAdjuster.vue'
 import IdReferenceOption from './IdReferenceOption.vue'
 import ValueSuggestInput from './ValueSuggestInput.vue'
 
@@ -289,6 +290,12 @@ function onEnumChange(event: Event) {
       v-else-if="schema.kind === 'filter'"
       :attribute="attribute"
       :document-ids="documentIds"
+      @update="commit"
+    />
+
+    <PreserveAspectRatioAttributeAdjuster
+      v-else-if="schema.kind === 'preserveAspectRatio'"
+      :attribute="attribute"
       @update="commit"
     />
 

@@ -15,6 +15,7 @@ export type AttributeKind =
   | 'color-matrix-values'
   | 'transform'
   | 'filter'
+  | 'preserveAspectRatio'
   | 'text'
 
 export interface DualNumberLabels {
@@ -314,6 +315,9 @@ export function getAttributeSchema(name: string, tagName?: string): AttributeSch
   }
   if (normalized === 'filter') {
     return { kind: 'filter' }
+  }
+  if (normalized === 'preserveaspectratio') {
+    return { kind: 'preserveAspectRatio' }
   }
 
   return { kind: 'text' }
