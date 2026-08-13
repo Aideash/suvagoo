@@ -1,5 +1,5 @@
 import { COLOR_MATRIX_TYPES } from './colorMatrixAttribute'
-import { parseViewBoxFromContent, type ViewBox } from './svgSchema'
+import type { ViewBox } from './svgSchema'
 
 export type AttributeKind =
   | 'color'
@@ -347,6 +347,17 @@ export function unitsForAttribute(name: string): readonly string[] {
   return getAttributeSchema(name).units ?? UNITLESS
 }
 
+/**
+ * Coordinate spaces can be far smaller than a document viewport — a marker
+ * without a viewBox spans three units, `objectBoundingBox` content spans one —
+ * so a whole-number step would leave the slider unusable there.
+ */
+export function stepForSpan(step: number, span: number): number {
+  if (span >= 20) return step
+  if (span >= 2) return Math.min(step, 0.1)
+  return Math.min(step, 0.01)
+}
+
 export function numericRangeForAttribute(
   name: string,
   viewBox: ViewBox,
@@ -354,25 +365,27 @@ export function numericRangeForAttribute(
 ): { min: number; max: number; step: number } {
   const schema = getAttributeSchema(name)
   const parsed = parseNumericValue(currentValue)
-  const baseStep = schema.step ?? 1
+  const declaredStep = schema.step ?? 1
 
   if (schema.kind === 'opacity') {
-    return { min: 0, max: 1, step: baseStep }
+    return { min: 0, max: 1, step: declaredStep }
   }
 
   if (schema.kind === 'percentage') {
     const unit = parsed?.unit ?? ''
     if (unit === '%' || !unit) {
-      return { min: 0, max: 100, step: baseStep }
+      return { min: 0, max: 100, step: declaredStep }
     }
   }
 
   if (parsed?.unit === '%') {
-    return { min: 0, max: 100, step: baseStep }
+    return { min: 0, max: 100, step: declaredStep }
   }
 
   const { width, height } = viewBox
   const span = Math.max(width, height, 1)
+  const baseStep = stepForSpan(declaredStep, span)
+  const fineStep = stepForSpan(0.5, span)
   const attr = name.toLowerCase()
 
   switch (attr) {
@@ -398,7 +411,7 @@ export function numericRangeForAttribute(
       return { min: viewBox.minY - span, max: viewBox.minY + span * 2, step: baseStep }
     case 'stroke-width':
     case 'font-size':
-      return { min: 0, max: span / 2, step: 0.5 }
+      return { min: 0, max: span / 2, step: fineStep }
     case 'markerwidth':
     case 'markerheight':
       return { min: 0, max: Math.max(20, span / 5), step: 0.5 }
@@ -604,7 +617,7 @@ export function dualNumericRangeForAttribute(
     return { min: 0, max: 1, step }
   }
 
-  return { min: 0, max: span / 2, step }
+  return { min: 0, max: span / 2, step: stepForSpan(step, span) }
 }
 
 export type ViewBoxField = 'minX' | 'minY' | 'width' | 'height'
@@ -615,18 +628,15 @@ export function viewBoxFieldRange(
   viewBox: ViewBox,
 ): { min: number; max: number; step: number } {
   const span = Math.max(viewBox.width, viewBox.height, 1)
+  const step = stepForSpan(1, span)
   switch (field) {
     case 'minX':
-      return { min: viewBox.minX - span, max: viewBox.minX + span * 2, step: 1 }
+      return { min: viewBox.minX - span, max: viewBox.minX + span * 2, step }
     case 'minY':
-      return { min: viewBox.minY - span, max: viewBox.minY + span * 2, step: 1 }
+      return { min: viewBox.minY - span, max: viewBox.minY + span * 2, step }
     case 'width':
-      return { min: 0, max: Math.max(viewBox.width * 2, span), step: 1 }
+      return { min: 0, max: Math.max(viewBox.width * 2, span), step }
     case 'height':
-      return { min: 0, max: Math.max(viewBox.height * 2, span), step: 1 }
+      return { min: 0, max: Math.max(viewBox.height * 2, span), step }
   }
-}
-
-export function viewBoxFromContent(content: string): ViewBox {
-  return parseViewBoxFromContent(content)
 }

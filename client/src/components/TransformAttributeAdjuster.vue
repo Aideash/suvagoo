@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import {
-  formatNumericValue,
-  numericRangeForAttribute,
-  viewBoxFromContent,
-} from '../lib/attributeSchema'
+import { formatNumericValue, numericRangeForAttribute } from '../lib/attributeSchema'
+import { viewBoxForAttribute } from '../lib/svgViewport'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
 import {
   ANGLE_TRANSFORM_RANGE,
@@ -41,7 +38,9 @@ const isEditingText = ref(false)
 const selectedIndex = ref<number | null>(null)
 const showAddMenu = ref(false)
 
-const viewBox = computed(() => viewBoxFromContent(props.content))
+const viewBox = computed(() =>
+  viewBoxForAttribute(props.content, props.attribute.path, props.attribute.attrName),
+)
 
 const parsedFunctions = computed(() => {
   if (isEditingText.value) return parseTransformList(props.attribute.value)

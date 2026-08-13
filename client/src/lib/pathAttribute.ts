@@ -737,13 +737,18 @@ export function pathIsClosed(commands: PathCommand[]): boolean {
   return commands.some((c) => c.type === 'Z')
 }
 
+/**
+ * `step` sizes the leap a fresh command takes from the pen position, so a
+ * command added inside a marker stays inside the marker.
+ */
 export function defaultCommandValues(
   type: PathCommandType,
   last: Point2D | null,
   viewBoxCenter: Point2D,
+  step = 10,
 ): number[] {
   const base = last ?? viewBoxCenter
-  const offset = { x: base.x + 10, y: base.y + 10 }
+  const offset = { x: base.x + step, y: base.y + step }
 
   switch (type) {
     case 'M':
@@ -755,12 +760,12 @@ export function defaultCommandValues(
     case 'V':
       return [offset.y]
     case 'C':
-      return [base.x, base.y, offset.x, offset.y, offset.x + 10, offset.y]
+      return [base.x, base.y, offset.x, offset.y, offset.x + step, offset.y]
     case 'S':
     case 'Q':
       return [base.x, base.y, offset.x, offset.y]
     case 'A':
-      return [10, 10, 0, 0, 1, offset.x, offset.y]
+      return [step, step, 0, 0, 1, offset.x, offset.y]
     case 'Z':
       return []
     default:
@@ -772,11 +777,12 @@ export function createDefaultCommand(
   type: PathCommandType,
   last: Point2D | null,
   viewBoxCenter: Point2D,
+  step?: number,
 ): PathCommand {
   return {
     type,
     relative: false,
-    values: defaultCommandValues(type, last, viewBoxCenter),
+    values: defaultCommandValues(type, last, viewBoxCenter, step),
   }
 }
 

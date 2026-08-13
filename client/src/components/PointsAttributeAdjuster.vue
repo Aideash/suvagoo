@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { numericRangeForAttribute, viewBoxFromContent } from '../lib/attributeSchema'
+import { numericRangeForAttribute } from '../lib/attributeSchema'
+import { viewBoxForAttribute } from '../lib/svgViewport'
 import {
   formatPointLabel,
   formatPoints,
@@ -29,7 +30,9 @@ const textDraft = ref(props.attribute.value)
 const isEditingText = ref(false)
 const selectedIndex = ref<number | null>(null)
 
-const viewBox = computed(() => viewBoxFromContent(props.content))
+const viewBox = computed(() =>
+  viewBoxForAttribute(props.content, props.attribute.path, props.attribute.attrName),
+)
 
 const parsedPoints = computed(() => {
   if (isEditingText.value) return parsePoints(props.attribute.value)
@@ -167,7 +170,10 @@ function addPoint() {
       : points.length > 0
         ? points[points.length - 1]
         : fallback
-  const newPoint = { x: template.x + 10, y: template.y + 10 }
+  // A tenth of the shorter axis reads as a deliberate step in any viewport,
+  // from a page-sized document down to a marker a few units across.
+  const offset = Math.min(vb.width, vb.height) / 10
+  const newPoint = { x: template.x + offset, y: template.y + offset }
   const insertAt = selectedIndex.value != null ? selectedIndex.value + 1 : points.length
   const next = insertPoint(points, insertAt, newPoint)
   commitPoints(next)

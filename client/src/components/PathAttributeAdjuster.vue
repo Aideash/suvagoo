@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { numericRangeForAttribute, viewBoxFromContent } from '../lib/attributeSchema'
+import { numericRangeForAttribute } from '../lib/attributeSchema'
+import { viewBoxForAttribute } from '../lib/svgViewport'
 import {
   ALL_ADDABLE_COMMANDS,
   createDefaultCommand,
@@ -39,12 +40,17 @@ const isEditingText = ref(false)
 const selectedIndex = ref<number | null>(null)
 const showAddMenu = ref(false)
 
-const viewBox = computed(() => viewBoxFromContent(props.content))
+const viewBox = computed(() =>
+  viewBoxForAttribute(props.content, props.attribute.path, props.attribute.attrName),
+)
 
 const viewBoxCenter = computed(() => ({
   x: viewBox.value.minX + viewBox.value.width / 2,
   y: viewBox.value.minY + viewBox.value.height / 2,
 }))
+
+/** How far a newly added command steps, scaled to the coordinate space. */
+const commandStep = computed(() => Math.min(viewBox.value.width, viewBox.value.height) / 10)
 
 const parsedCommands = computed(() => {
   if (isEditingText.value) return parsePathD(props.attribute.value)
@@ -248,7 +254,7 @@ function onToggleRelativeChip(index: number, event: MouseEvent) {
 function addCommand(type: PathCommandType) {
   const commands = parsedCommands.value ?? []
   const last = lastEndpoint(commands)
-  const cmd = createDefaultCommand(type, last, viewBoxCenter.value)
+  const cmd = createDefaultCommand(type, last, viewBoxCenter.value, commandStep.value)
   const insertAt = selectedIndex.value != null ? selectedIndex.value + 1 : commands.length
   const next = insertCommand(commands, insertAt, cmd)
   commitCommands(next)

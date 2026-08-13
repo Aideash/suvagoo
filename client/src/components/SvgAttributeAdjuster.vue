@@ -6,8 +6,8 @@ import {
   numericRangeForAttribute,
   parseNumericValue,
   unitsForAttribute,
-  viewBoxFromContent,
 } from '../lib/attributeSchema'
+import { viewBoxForAttribute } from '../lib/svgViewport'
 import {
   collectDocumentIds,
   findDocumentIdConflict,
@@ -50,7 +50,13 @@ const textInput = ref<{ setCaret: (offset: number) => void }>()
 const idWarnId = useId()
 
 const schema = computed(() => getAttributeSchema(props.attribute.attrName, props.attribute.tagName))
-const viewBox = computed(() => viewBoxFromContent(props.content))
+/**
+ * Ranges follow the coordinate space the attribute is actually measured in, so
+ * geometry inside a marker or symbol is scaled to that resource, not the page.
+ */
+const viewBox = computed(() =>
+  viewBoxForAttribute(props.content, props.attribute.path, props.attribute.attrName),
+)
 
 /** Parsed once here and shared with the adjusters that offer `url(#…)` completion. */
 const documentIds = computed(() => collectDocumentIds(props.content))

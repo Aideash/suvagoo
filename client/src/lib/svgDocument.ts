@@ -590,15 +590,20 @@ function trimDeletionRange(content: string, start: number, end: number) {
   return { start: nextStart, end: nextEnd }
 }
 
+/**
+ * `viewBox` names the coordinate space the inserted value should be sized to.
+ * Callers that know the element sits in a narrower space (a marker, a symbol)
+ * pass that space; the document viewport is the fallback.
+ */
 export function insertAttribute(
   content: string,
   offset: number,
   attrName: string,
+  viewBox: ViewBox = parseViewBoxFromContent(content),
 ): EditResult | null {
   const context = findElementAtOffset(content, offset)
   if (!context) return null
 
-  const viewBox = parseViewBoxFromContent(content)
   const openTag = content.slice(context.openTagStart, context.openTagEnd)
   const existing = context.existingAttributes[attrName]
   if (existing !== undefined) {
@@ -631,6 +636,7 @@ export function insertChildElement(
   offset: number,
   childTag: string,
   snippetMode: SnippetMode = DEFAULT_SNIPPET_MODE,
+  viewBox: ViewBox = parseViewBoxFromContent(content),
 ): EditResult | null {
   const context = findElementAtOffset(content, offset)
   if (!context) return null
@@ -646,7 +652,6 @@ export function insertChildElement(
     return null
   }
 
-  const viewBox = parseViewBoxFromContent(content)
   const snippet = getSnippetForTag(childTag, viewBox, snippetMode)
   const parentIndent = lineIndentAt(content, context.openTagStart)
   const childIndent = `${parentIndent}  `

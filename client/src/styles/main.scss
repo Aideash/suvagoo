@@ -56,6 +56,18 @@
 :root {
   --radius: #{$radius-sm};
   --overlay-soft: color-mix(in srgb, var(--text) 5%, transparent);
+
+  /* Shared by every coordinate chip floating over a preview surface. */
+  --coord-transition-time: 250ms;
+  --coord-gap: 0.15rem;
+  --coord-font-size: 0.6875rem;
+  --coord-line-height: 1.3;
+  --coord-padding-y: 0.15rem;
+  --coord-border-width: 1px;
+  --coord-row-height: calc(
+    2 * var(--coord-padding-y) + var(--coord-line-height) * var(--coord-font-size) + 2 *
+      var(--coord-border-width)
+  );
 }
 
 *,

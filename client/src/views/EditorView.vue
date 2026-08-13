@@ -19,6 +19,14 @@ import {
 } from '../lib/svgDocument'
 import { parsePoints } from '../lib/pointsAttribute'
 import { parsePathD } from '../lib/pathAttribute'
+import { buildDefsPreview } from '../lib/defsPreview'
+import { buildIsolatedPreview } from '../lib/isolatedPreview'
+import type { HandleSurface } from '../lib/handleEdit'
+import {
+  contentViewportAtOffset,
+  isResourceContent,
+  viewportAtOffsetForAttribute,
+} from '../lib/svgViewport'
 import { useSnippetMode } from '../composables/useSnippetMode'
 
 const route = useRoute()
@@ -73,6 +81,20 @@ const pathEdit = computed(() => {
     selectedCommandIndex: previewState.value.selectedCommandIndex,
     selectedHandleIndex: previewState.value.selectedPathHandleIndex,
   }
+})
+
+const defsPreview = computed(() => buildDefsPreview(content.value, cursorOffset.value))
+const isolatedPreview = computed(() => buildIsolatedPreview(content.value, cursorOffset.value))
+
+/**
+ * Geometry declared inside a resource is painted elsewhere and in another
+ * coordinate space, so its handles belong on the isolated preview.
+ */
+const handleSurface = computed<HandleSurface | null>(() => {
+  const attr = previewState.value.attribute
+  if (!attr) return null
+  if (!isResourceContent(attr.path)) return 'document'
+  return isolatedPreview.value ? 'isolated' : null
 })
 
 onMounted(async () => {
@@ -145,7 +167,13 @@ function cancel() {
 
 function onInsertChild(tagName: string) {
   builderError.value = ''
-  const result = insertChildElement(content.value, cursorOffset.value, tagName, snippetMode.value)
+  const result = insertChildElement(
+    content.value,
+    cursorOffset.value,
+    tagName,
+    snippetMode.value,
+    contentViewportAtOffset(content.value, cursorOffset.value).viewBox,
+  )
   if (!result) {
     builderError.value = `Could not insert <${tagName}> at the cursor.`
     return
@@ -155,7 +183,12 @@ function onInsertChild(tagName: string) {
 
 function onInsertAttribute(name: string) {
   builderError.value = ''
-  const result = insertAttribute(content.value, cursorOffset.value, name)
+  const result = insertAttribute(
+    content.value,
+    cursorOffset.value,
+    name,
+    viewportAtOffsetForAttribute(content.value, cursorOffset.value, name).viewBox,
+  )
   if (!result) {
     builderError.value = `Could not insert attribute ${name} at the cursor.`
     return
@@ -316,6 +349,9 @@ function onPreviewUpdatePath(value: string) {
             :content="content"
             :points-edit="pointsEdit"
             :path-edit="pathEdit"
+            :defs-preview="defsPreview"
+            :isolated-preview="isolatedPreview"
+            :handle-surface="handleSurface"
             show-axes
             @select-point="onPreviewSelectPoint"
             @update-points="onPreviewUpdatePoints"

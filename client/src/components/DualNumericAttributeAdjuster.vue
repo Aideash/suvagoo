@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import {
-  dualNumericRangeForAttribute,
-  getAttributeSchema,
-  viewBoxFromContent,
-} from '../lib/attributeSchema'
+import { dualNumericRangeForAttribute, getAttributeSchema } from '../lib/attributeSchema'
+import { viewBoxForAttribute } from '../lib/svgViewport'
 import { formatDualNumeric, parseDualNumeric, type DualNumeric } from '../lib/dualNumericAttribute'
 import {
   DUAL_NUMERIC_LENSES,
@@ -37,7 +34,9 @@ const stretchAxis = ref<StretchAxis>('x')
 type FieldRange = { min: number; max: number; step: number }
 const sharedDefaults = ref<FieldRange>({ min: 0, max: 50, step: 0.5 })
 
-const viewBox = computed(() => viewBoxFromContent(props.content))
+const viewBox = computed(() =>
+  viewBoxForAttribute(props.content, props.attribute.path, props.attribute.attrName),
+)
 const schema = computed(() => getAttributeSchema(props.attribute.attrName))
 const labels = computed(() => schema.value.dualNumber ?? { primary: 'X', secondary: 'Y' })
 
