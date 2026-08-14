@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { listCollections, createCollection, type Collection } from '../api/collections'
 import { STARTER_SVG, createSvg, getSvg, updateSvg } from '../api/svgs'
 import SvgEditor from '../components/SvgEditor.vue'
 import SvgPreview from '../components/SvgPreview.vue'
@@ -35,6 +36,12 @@ const { snippetMode } = useSnippetMode()
 
 const isEditing = computed(() => Boolean(route.params.id))
 const name = ref('Untitled SVG')
+/** Empty string means unfiled; HTML <select> cannot round-trip null. */
+const collectionId = ref('')
+const NEW_FOLDER = '__new_folder__'
+const collections = ref<Collection[]>([])
+/** Value held while the New Folder prompt is open so cancel can restore it. */
+const previousCollectionId = ref('')
 const content = ref(STARTER_SVG)
 const cursorOffset = ref(0)
 const builderError = ref('')
@@ -98,14 +105,24 @@ const handleSurface = computed<HandleSurface | null>(() => {
 })
 
 onMounted(async () => {
-  if (!isEditing.value) return
-
   loading.value = true
   error.value = ''
   try {
-    const svg = await getSvg(route.params.id as string)
-    name.value = svg.name
-    content.value = svg.content
+    collections.value = await listCollections()
+
+    if (isEditing.value) {
+      const svg = await getSvg(route.params.id as string)
+      name.value = svg.name
+      collectionId.value = svg.collectionId ?? ''
+      previousCollectionId.value = collectionId.value
+      content.value = svg.content
+    } else {
+      const fromQuery = route.query.collection
+      if (typeof fromQuery === 'string' && collections.value.some((c) => c.id === fromQuery)) {
+        collectionId.value = fromQuery
+      }
+      previousCollectionId.value = collectionId.value
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load SVG'
   } finally {
@@ -113,11 +130,43 @@ onMounted(async () => {
   }
 })
 
+async function onCollectionChange() {
+  if (collectionId.value !== NEW_FOLDER) {
+    previousCollectionId.value = collectionId.value
+    return
+  }
+
+  const name = window.prompt('New folder name')
+  if (name == null) {
+    collectionId.value = previousCollectionId.value
+    return
+  }
+  const trimmed = name.trim()
+  if (!trimmed) {
+    collectionId.value = previousCollectionId.value
+    return
+  }
+
+  try {
+    const created = await createCollection({ name: trimmed })
+    collections.value = [...collections.value, created].sort((a, b) => a.name.localeCompare(b.name))
+    collectionId.value = created.id
+    previousCollectionId.value = created.id
+  } catch (err) {
+    collectionId.value = previousCollectionId.value
+    error.value = err instanceof Error ? err.message : 'Failed to create folder'
+  }
+}
+
 async function persistSvg(): Promise<string> {
+  const folderId =
+    collectionId.value && collectionId.value !== NEW_FOLDER ? collectionId.value : null
+
   if (isEditing.value) {
     await updateSvg(route.params.id as string, {
       name: name.value,
       content: content.value,
+      collectionId: folderId,
     })
     return route.params.id as string
   }
@@ -125,6 +174,7 @@ async function persistSvg(): Promise<string> {
   const created = await createSvg({
     name: name.value,
     content: content.value,
+    collectionId: folderId,
   })
   return created.id
 }
@@ -148,8 +198,8 @@ async function saveAndExit() {
   saving.value = true
   error.value = ''
   try {
-    const id = await persistSvg()
-    router.push({ name: 'view', params: { id } })
+    await persistSvg()
+    router.push({ name: 'list' })
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to save SVG'
   } finally {
@@ -278,6 +328,19 @@ function onPreviewUpdatePath(value: string) {
       <div class="editor-view__header-left">
         <button type="button" class="btn btn--secondary" @click="cancel">← Back</button>
         <input v-model="name" type="text" class="input editor-view__name" placeholder="SVG name" />
+        <select
+          v-model="collectionId"
+          class="input editor-view__folder"
+          aria-label="Folder"
+          :disabled="loading"
+          @change="onCollectionChange"
+        >
+          <option value="">No folder</option>
+          <option v-for="collection in collections" :key="collection.id" :value="collection.id">
+            {{ collection.name }}
+          </option>
+          <option :value="NEW_FOLDER">New folder…</option>
+        </select>
       </div>
       <div class="page-header__actions">
         <button
@@ -383,6 +446,12 @@ function onPreviewUpdatePath(value: string) {
   &__name {
     flex: 1;
     max-width: 320px;
+  }
+
+  &__folder {
+    flex: 0 1 10rem;
+    min-width: 7rem;
+    max-width: 12rem;
   }
 
   &__error {

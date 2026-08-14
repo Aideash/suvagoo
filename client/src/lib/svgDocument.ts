@@ -74,7 +74,10 @@ function parseAttributes(openTagSource: string): Record<string, string> {
   const attrs: Record<string, string> = {}
   const pattern = /([:@A-Za-z_][\w:.-]*)\s*(=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g
   let match: RegExpExecArray | null
-  while ((match = pattern.exec(openTagSource))) {
+
+  const attrSource = openTagSource.replace(TAG_NAME, '')
+
+  while ((match = pattern.exec(attrSource))) {
     const name = match[1]
     if (name === '/' || name.startsWith('?')) continue
     const value = match[3] ?? match[4] ?? match[5] ?? ''

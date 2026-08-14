@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, unlink, access } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { CreateSvgInput, SvgMeta, SvgRecord, UpdateSvgInput } from '../types.js'
+import { collectionExists } from './collections.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.resolve(__dirname, '../../data')
@@ -53,15 +54,28 @@ export async function getSvg(id: string): Promise<SvgRecord | null> {
   }
 }
 
+async function resolveCollectionId(
+  collectionId: string | null | undefined,
+): Promise<string | null | undefined> {
+  if (collectionId === undefined) return undefined
+  if (collectionId === null || collectionId === '') return null
+  if (!(await collectionExists(collectionId))) {
+    throw new Error('Collection not found')
+  }
+  return collectionId
+}
+
 export async function createSvg(input: CreateSvgInput): Promise<SvgRecord> {
   if (!isValidSvgContent(input.content)) {
     throw new Error('Content must contain a root <svg> element')
   }
 
+  const collectionId = await resolveCollectionId(input.collectionId)
   const now = new Date().toISOString()
   const meta: SvgMeta = {
     id: crypto.randomUUID(),
     name: input.name.trim() || 'Untitled SVG',
+    collectionId: collectionId ?? null,
     createdAt: now,
     updatedAt: now,
   }
@@ -92,12 +106,32 @@ export async function updateSvg(id: string, input: UpdateSvgInput): Promise<SvgR
   if (input.name !== undefined) {
     meta.name = input.name.trim() || 'Untitled SVG'
   }
+
+  if (input.collectionId !== undefined) {
+    meta.collectionId = (await resolveCollectionId(input.collectionId)) ?? null
+  }
+
   meta.updatedAt = new Date().toISOString()
   index[idx] = meta
   await writeIndex(index)
 
   const content = input.content ?? (await readFile(svgPath(id), 'utf-8'))
   return { ...meta, content }
+}
+
+/** Clears `collectionId` on every SVG that referenced a deleted collection. */
+export async function clearCollectionFromSvgs(collectionId: string): Promise<void> {
+  const index = await readIndex()
+  let changed = false
+  for (const entry of index) {
+    if (entry.collectionId === collectionId) {
+      entry.collectionId = null
+      changed = true
+    }
+  }
+  if (changed) {
+    await writeIndex(index)
+  }
 }
 
 export async function deleteSvg(id: string): Promise<boolean> {

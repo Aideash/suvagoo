@@ -6,6 +6,7 @@ import SvgPreview from './SvgPreview.vue'
 
 defineProps<{
   svg: SvgMeta
+  collectionName?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -48,6 +49,7 @@ function formatDate(iso: string): string {
         <RouterLink :to="{ name: 'view', params: { id: svg.id } }">
           {{ svg.name }}
         </RouterLink>
+        <span v-if="collectionName" class="svg-card__folder"> — {{ collectionName }}</span>
       </h2>
       <p class="svg-card__date">Updated {{ formatDate(svg.updatedAt) }}</p>
 
@@ -104,6 +106,11 @@ function formatDate(iso: string): string {
         color: $color-accent;
       }
     }
+  }
+
+  &__folder {
+    font-weight: 400;
+    color: var(--text-faint);
   }
 
   &__date {

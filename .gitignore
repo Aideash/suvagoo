@@ -2,6 +2,7 @@ node_modules/
 dist/
 server/data/svgs/*.svg
 server/data/index.json
+server/data/collections.json
 *.log
 .DS_Store
 

@@ -29,12 +29,20 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, content } = req.body as { name?: string; content?: string }
+    const { name, content, collectionId } = req.body as {
+      name?: string
+      content?: string
+      collectionId?: string | null
+    }
     if (!content) {
       res.status(400).json({ error: 'content is required' })
       return
     }
-    const svg = await createSvg({ name: name ?? 'Untitled SVG', content })
+    const svg = await createSvg({
+      name: name ?? 'Untitled SVG',
+      content,
+      collectionId,
+    })
     res.status(201).json(svg)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to create SVG'
@@ -44,8 +52,12 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const { name, content } = req.body as { name?: string; content?: string }
-    const svg = await updateSvg(req.params.id, { name, content })
+    const { name, content, collectionId } = req.body as {
+      name?: string
+      content?: string
+      collectionId?: string | null
+    }
+    const svg = await updateSvg(req.params.id, { name, content, collectionId })
     if (!svg) {
       res.status(404).json({ error: 'SVG not found' })
       return

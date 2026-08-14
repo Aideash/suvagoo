@@ -4,6 +4,7 @@ import { config as loadEnv } from 'dotenv'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import svgsRouter from './routes/svgs.js'
+import collectionsRouter from './routes/collections.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 loadEnv({ path: path.resolve(__dirname, '../../.env') })
@@ -18,6 +19,7 @@ if (!isProd) {
 }
 
 app.use('/api/svgs', svgsRouter)
+app.use('/api/collections', collectionsRouter)
 
 if (isProd) {
   const clientDist = path.resolve(__dirname, '../../client/dist')

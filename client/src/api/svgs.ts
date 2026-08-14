@@ -1,6 +1,7 @@
 export interface SvgMeta {
   id: string
   name: string
+  collectionId?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -12,11 +13,13 @@ export interface SvgRecord extends SvgMeta {
 export interface CreateSvgInput {
   name: string
   content: string
+  collectionId?: string | null
 }
 
 export interface UpdateSvgInput {
   name?: string
   content?: string
+  collectionId?: string | null
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
