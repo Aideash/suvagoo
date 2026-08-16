@@ -460,7 +460,6 @@ function penLabel(index: number): string {
   display: flex;
   flex-direction: column;
   gap: $spacing-sm;
-  padding-bottom: 100%;
 
   &__text {
     width: 100%;

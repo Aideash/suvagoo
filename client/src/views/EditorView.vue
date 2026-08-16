@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listCollections, createCollection, type Collection } from '../api/collections'
 import { STARTER_SVG, createSvg, getSvg, updateSvg } from '../api/svgs'
@@ -29,6 +29,14 @@ import {
   viewportAtOffsetForAttribute,
 } from '../lib/svgViewport'
 import { useSnippetMode } from '../composables/useSnippetMode'
+import { bakeTransform } from '../lib/bakeTransform'
+import { selectionPivot } from '../lib/selectionBounds'
+import {
+  applySessionToPreviewContent,
+  createIdentitySession,
+  isIdentitySession,
+  type TransformSessionValues,
+} from '../lib/transformSession'
 
 const route = useRoute()
 const router = useRouter()
@@ -53,6 +61,10 @@ const editorRef = ref<InstanceType<typeof SvgEditor> | null>(null)
 const explorerRef = ref<InstanceType<typeof SvgStructureExplorer> | null>(null)
 const explorerOpen = ref(true)
 
+const selectedPaths = ref<PathSegment[][]>([])
+const transformSession = ref<TransformSessionValues>(createIdentitySession())
+const bakeWarning = ref('')
+
 const previewState = ref<{
   attribute: AttributeContext | null
   selectedPointIndex: number | null
@@ -65,9 +77,15 @@ const previewState = ref<{
   selectedPathHandleIndex: null,
 })
 
+const previewContent = computed(() =>
+  applySessionToPreviewContent(content.value, selectedPaths.value, transformSession.value),
+)
+
 const pointsEdit = computed(() => {
   const attr = previewState.value.attribute
   if (!attr || attr.attrName !== 'points') return null
+  // Handles edit real source geometry; hide while a non-identity session is active.
+  if (!isIdentitySession(transformSession.value)) return null
   const points = parsePoints(attr.value)
   if (!points) return null
   return {
@@ -80,6 +98,7 @@ const pointsEdit = computed(() => {
 const pathEdit = computed(() => {
   const attr = previewState.value.attribute
   if (!attr || attr.attrName !== 'd') return null
+  if (!isIdentitySession(transformSession.value)) return null
   const commands = parsePathD(attr.value)
   if (!commands) return null
   return {
@@ -90,8 +109,10 @@ const pathEdit = computed(() => {
   }
 })
 
-const defsPreview = computed(() => buildDefsPreview(content.value, cursorOffset.value))
-const isolatedPreview = computed(() => buildIsolatedPreview(content.value, cursorOffset.value))
+const defsPreview = computed(() => buildDefsPreview(previewContent.value, cursorOffset.value))
+const isolatedPreview = computed(() =>
+  buildIsolatedPreview(previewContent.value, cursorOffset.value),
+)
 
 /**
  * Geometry declared inside a resource is painted elsewhere and in another
@@ -256,6 +277,75 @@ function onSelectElement(path: PathSegment[]) {
   editorRef.value?.setCursor(offset)
 }
 
+function onSelectionChange(paths: PathSegment[][]) {
+  selectedPaths.value = paths
+  bakeWarning.value = ''
+  const pivot = selectionPivot(content.value, paths)
+  // Refresh pivot when selection changes; keep tx/ty/angle/scale if already editing.
+  if (isIdentitySession(transformSession.value)) {
+    transformSession.value = createIdentitySession(pivot)
+  } else {
+    transformSession.value = { ...transformSession.value, cx: pivot.cx, cy: pivot.cy }
+  }
+}
+
+function onTransformCommit() {
+  bakeWarning.value = ''
+  if (selectedPaths.value.length === 0 || isIdentitySession(transformSession.value)) return
+
+  const result = bakeTransform(content.value, selectedPaths.value, transformSession.value)
+  const cursor =
+    cursorOffsetForPath(result.content, selectedPaths.value[0] ?? []) ?? cursorOffset.value
+  editorRef.value?.applyChange(result.content, cursor)
+
+  if (result.skipped.length) {
+    const tags = [...new Set(result.skipped.map((s) => s.tag))].join(', ')
+    bakeWarning.value = `Skipped ${result.skipped.length} element(s): ${tags}`
+  }
+
+  // Path identities change when tags convert (e.g. circle → path).
+  if (result.convertedToPath.length > 0) {
+    selectedPaths.value = []
+    transformSession.value = createIdentitySession()
+  } else {
+    transformSession.value = createIdentitySession(
+      selectionPivot(result.content, selectedPaths.value),
+    )
+  }
+}
+
+function onTransformCancel() {
+  bakeWarning.value = ''
+  selectedPaths.value = []
+  transformSession.value = createIdentitySession()
+}
+
+function onTransformSessionUpdate(session: TransformSessionValues) {
+  transformSession.value = session
+  bakeWarning.value = ''
+}
+
+function onEscapeTransform(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+  if (selectedPaths.value.length === 0 && isIdentitySession(transformSession.value)) return
+  event.preventDefault()
+  onTransformCancel()
+}
+
+watch(selectedPaths, (paths) => {
+  if (paths.length === 0 && !isIdentitySession(transformSession.value)) {
+    transformSession.value = createIdentitySession()
+  }
+})
+
+onMounted(() => {
+  window.addEventListener('keydown', onEscapeTransform)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onEscapeTransform)
+})
+
 function onDeleteChild(path: PathSegment[]) {
   builderError.value = ''
   const result = deleteChildElement(content.value, path)
@@ -391,12 +481,19 @@ function onPreviewUpdatePath(value: string) {
           v-show="explorerOpen"
           :content="content"
           :cursor-offset="cursorOffset"
+          :selected-paths="selectedPaths"
+          :transform-session="transformSession"
+          :bake-warning="bakeWarning"
           @insert-child="onInsertChild"
           @insert-attribute="onInsertAttribute"
           @select-element="onSelectElement"
+          @selection-change="onSelectionChange"
           @delete-child="onDeleteChild"
           @delete-attribute="onDeleteAttribute"
           @update-attribute="onUpdateAttribute"
+          @update:transform-session="onTransformSessionUpdate"
+          @transform-commit="onTransformCommit"
+          @transform-cancel="onTransformCancel"
           @preview-state-change="onPreviewStateChange"
         />
       </aside>
@@ -409,7 +506,7 @@ function onPreviewUpdatePath(value: string) {
         <section class="editor-view__pane editor-view__pane--preview">
           <h2 class="editor-view__label">Preview</h2>
           <SvgPreview
-            :content="content"
+            :content="previewContent"
             :points-edit="pointsEdit"
             :path-edit="pathEdit"
             :defs-preview="defsPreview"

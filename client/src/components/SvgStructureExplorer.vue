@@ -20,20 +20,29 @@ import {
   type PathSegment,
 } from '../lib/svgDocument'
 import SvgAttributeAdjuster from './SvgAttributeAdjuster.vue'
+import BulkTransformPanel from './BulkTransformPanel.vue'
 import { useSnippetMode } from '../composables/useSnippetMode'
+import type { TransformSessionValues } from '../lib/transformSession'
 
 const props = defineProps<{
   content: string
   cursorOffset: number
+  selectedPaths: PathSegment[][]
+  transformSession: TransformSessionValues
+  bakeWarning?: string
 }>()
 
 const emit = defineEmits<{
   insertChild: [tagName: string]
   insertAttribute: [name: string]
   selectElement: [path: PathSegment[]]
+  selectionChange: [paths: PathSegment[][]]
   deleteChild: [path: PathSegment[]]
   deleteAttribute: [name: string]
   updateAttribute: [path: PathSegment[], name: string, value: string]
+  'update:transformSession': [session: TransformSessionValues]
+  transformCommit: []
+  transformCancel: []
   previewStateChange: [
     state: {
       attribute: AttributeContext | null
@@ -53,6 +62,8 @@ const showAllChildren = ref(false)
 const selectedPointIndex = ref<number | null>(null)
 const selectedCommandIndex = ref<number | null>(null)
 const selectedPathHandleIndex = ref<number | null>(null)
+/** Anchor index into flatTree for Shift+click ranges. */
+const selectionAnchorIndex = ref<number | null>(null)
 
 const needle = computed(() => filter.value.trim().toLowerCase())
 const parsable = computed(() => isXmlParsable(props.content))
@@ -85,9 +96,18 @@ function onModeKeydown(event: KeyboardEvent) {
 }
 
 function onGlobalKeydown(event: KeyboardEvent) {
-  if (!event.ctrlKey || event.key !== 'd') return
-  event.preventDefault()
-  toggleDeleteMode()
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    if (props.selectedPaths.length > 0) emit('transformCancel')
+
+    const rootPath = indexedDocument.value?.path
+    if (rootPath) emit('selectElement', rootPath)
+    return
+  }
+  if (event.ctrlKey && event.key === 'd') {
+    event.preventDefault()
+    toggleDeleteMode()
+  }
 }
 
 onMounted(() => {
@@ -172,6 +192,14 @@ function isActivePath(path: PathSegment[]): boolean {
   return pathsEqual(path, context.value.path)
 }
 
+function isMultiSelected(path: PathSegment[]): boolean {
+  return props.selectedPaths.some((selected) => pathsEqual(selected, path))
+}
+
+function pathKey(path: PathSegment[]): string {
+  return path.map((segment) => `${segment.tag}:${segment.index}`).join('/')
+}
+
 function renderTreeLines(
   node: IndexedDocumentNode,
   depth = 0,
@@ -188,7 +216,38 @@ const flatTree = computed(() => {
   return renderTreeLines(indexedDocument.value)
 })
 
-function onTreeClick(path: PathSegment[]) {
+function treeIndexForPath(path: PathSegment[]): number {
+  return flatTree.value.findIndex((row) => pathsEqual(row.node.path, path))
+}
+
+function onTreeClick(path: PathSegment[], event: MouseEvent) {
+  const index = treeIndexForPath(path)
+  const meta = event.metaKey || event.ctrlKey
+
+  if (event.shiftKey && selectionAnchorIndex.value != null && index >= 0) {
+    const from = Math.min(selectionAnchorIndex.value, index)
+    const to = Math.max(selectionAnchorIndex.value, index)
+    const range = flatTree.value.slice(from, to + 1).map((row) => row.node.path)
+    emit('selectionChange', range)
+    emit('selectElement', path)
+    return
+  }
+
+  if (meta) {
+    const exists = props.selectedPaths.some((selected) => pathsEqual(selected, path))
+    const next = exists
+      ? props.selectedPaths.filter((selected) => !pathsEqual(selected, path))
+      : [...props.selectedPaths, path]
+    emit('selectionChange', next)
+    selectionAnchorIndex.value = index >= 0 ? index : selectionAnchorIndex.value
+    emit('selectElement', path)
+    return
+  }
+
+  // Regular click - 1. set in transform, 2. deselect all
+  // emit('selectionChange', [path])
+  // emit('selectionChange', [])
+  selectionAnchorIndex.value = index >= 0 ? index : null
   emit('selectElement', path)
 }
 
@@ -331,18 +390,22 @@ function onAttributeUpdate(value: string) {
 
       <section class="svg-explorer__section">
         <h3 class="svg-explorer__heading">Document</h3>
+        <p class="svg-explorer__hint">Click to select · ⌘/Ctrl+click toggle · Shift+click range</p>
         <ul v-if="flatTree.length" class="svg-explorer__tree">
           <li
             v-for="row in flatTree"
-            :key="row.node.path.map((segment) => `${segment.tag}:${segment.index}`).join('/')"
+            :key="pathKey(row.node.path)"
             :style="{ paddingLeft: `${row.depth * 12 + 8}px` }"
           >
             <button
               type="button"
               class="svg-explorer__tree-row"
-              :class="{ active: isActivePath(row.node.path) }"
+              :class="{
+                active: isActivePath(row.node.path),
+                selected: isMultiSelected(row.node.path),
+              }"
               :title="`Select ${formatElementPath(row.node.path)}`"
-              @click="onTreeClick(row.node.path)"
+              @click="onTreeClick(row.node.path, $event)"
             >
               <span class="svg-explorer__tree-tag">{{ childLabel(row.node) }}</span>
               <span
@@ -488,6 +551,17 @@ function onAttributeUpdate(value: string) {
         @update="onAttributeUpdate"
         @select-point="onSelectPoint"
         @select-command="onSelectCommand"
+      />
+
+      <BulkTransformPanel
+        v-if="selectedPaths.length"
+        :content="content"
+        :selected-paths="selectedPaths"
+        :session="transformSession"
+        :bake-warning="bakeWarning"
+        @update:session="emit('update:transformSession', $event)"
+        @commit="emit('transformCommit')"
+        @cancel="emit('transformCancel')"
       />
     </div>
   </div>
@@ -739,6 +813,21 @@ function onAttributeUpdate(value: string) {
     &.active {
       background: color-mix(in srgb, var(--accent) 15%, transparent);
     }
+
+    &.selected {
+      outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+
+    &.selected.active {
+      background: color-mix(in srgb, var(--accent) 20%, transparent);
+    }
+  }
+
+  &__hint {
+    margin: 0 0 $spacing-xs;
+    font-size: 0.6875rem;
+    color: $color-text-muted;
   }
 
   &__tree-tag {
