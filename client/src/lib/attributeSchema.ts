@@ -1,5 +1,5 @@
 import { COLOR_MATRIX_TYPES } from './colorMatrixAttribute'
-import type { ViewBox } from './svgSchema'
+import { getElementSchema, type ViewBox } from './svgSchema'
 
 export type AttributeKind =
   | 'color'
@@ -15,6 +15,7 @@ export type AttributeKind =
   | 'color-matrix-values'
   | 'transform'
   | 'filter'
+  | 'filter-input'
   | 'preserveAspectRatio'
   | 'orient'
   | 'stroke-dasharray'
@@ -264,6 +265,13 @@ function enumSchemaFor(name: string): AttributeSchema | null {
 export function getAttributeSchema(name: string, tagName?: string): AttributeSchema {
   const normalized = name.toLowerCase()
   const tag = tagName ? tagName.toLowerCase() : ''
+
+  if (
+    (normalized === 'in' || normalized === 'in2') &&
+    getElementSchema(tag)?.attributes.some((attribute) => attribute.toLowerCase() === normalized)
+  ) {
+    return { kind: 'filter-input' }
+  }
 
   if (normalized === 'type') {
     if (tag === 'fecolormatrix') {

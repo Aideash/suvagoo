@@ -12,6 +12,8 @@ const props = defineProps<{
    * blur, which the native change event would otherwise pre-empt.
    */
   commitOn?: 'change' | 'enter'
+  /** Open the available choices when the existing value is clicked. */
+  openOnClick?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -42,6 +44,11 @@ watch(
 
 function syncCaret() {
   emit('update:caret', inputEl.value?.selectionStart ?? props.modelValue.length)
+}
+
+function onClick() {
+  syncCaret()
+  if (props.openOnClick) openListbox()
 }
 
 function onInput(event: Event) {
@@ -176,7 +183,7 @@ defineExpose({
       showSuggestions && activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined
     "
     @input="onInput"
-    @click="syncCaret"
+    @click="onClick"
     @keyup="syncCaret"
     @blur="onBlur"
     @change="onChange"

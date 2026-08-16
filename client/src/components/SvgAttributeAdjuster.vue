@@ -23,6 +23,7 @@ import ViewBoxAttributeAdjuster from './ViewBoxAttributeAdjuster.vue'
 import ColorMatrixValuesAdjuster from './ColorMatrixValuesAdjuster.vue'
 import TransformAttributeAdjuster from './TransformAttributeAdjuster.vue'
 import FilterAttributeAdjuster from './FilterAttributeAdjuster.vue'
+import FilterInputAttributeAdjuster from './FilterInputAttributeAdjuster.vue'
 import PreserveAspectRatioAttributeAdjuster from './PreserveAspectRatioAttributeAdjuster.vue'
 import OrientAttributeAdjuster from './OrientAttributeAdjuster.vue'
 import StrokeDashArrayAttributeAdjuster from './StrokeDashArrayAttributeAdjuster.vue'
@@ -339,6 +340,13 @@ function setEnumValue(value: string) {
       v-else-if="schema.kind === 'filter'"
       :attribute="attribute"
       :document-ids="documentIds"
+      @update="commit"
+    />
+
+    <FilterInputAttributeAdjuster
+      v-else-if="schema.kind === 'filter-input'"
+      :attribute="attribute"
+      :content="content"
       @update="commit"
     />
 
