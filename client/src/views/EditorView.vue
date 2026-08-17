@@ -28,6 +28,7 @@ import {
   isResourceContent,
   viewportAtOffsetForAttribute,
 } from '../lib/svgViewport'
+import { useAutosavePreference } from '../composables/useAutosavePreference'
 import { useSnippetMode } from '../composables/useSnippetMode'
 import { bakeTransform } from '../lib/bakeTransform'
 import { selectionPivot } from '../lib/selectionBounds'
@@ -41,6 +42,9 @@ import {
 const route = useRoute()
 const router = useRouter()
 const { snippetMode } = useSnippetMode()
+const { autosaveEnabled, toggleAutosave } = useAutosavePreference()
+
+const AUTOSAVE_DELAY_MS = 1000
 
 const isEditing = computed(() => Boolean(route.params.id))
 const name = ref('Untitled SVG')
@@ -56,6 +60,15 @@ const builderError = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
+
+type PersistSnapshot = { name: string; content: string; collectionId: string }
+
+let lastPersisted: PersistSnapshot = {
+  name: name.value,
+  content: content.value,
+  collectionId: collectionId.value,
+}
+let autosaveTimer: ReturnType<typeof setTimeout> | undefined
 
 const editorRef = ref<InstanceType<typeof SvgEditor> | null>(null)
 const explorerRef = ref<InstanceType<typeof SvgStructureExplorer> | null>(null)
@@ -148,6 +161,7 @@ onMounted(async () => {
     error.value = err instanceof Error ? err.message : 'Failed to load SVG'
   } finally {
     loading.value = false
+    rememberPersisted()
   }
 })
 
@@ -179,32 +193,78 @@ async function onCollectionChange() {
   }
 }
 
-async function persistSvg(): Promise<string> {
+function currentSnapshot(): PersistSnapshot {
+  return {
+    name: name.value,
+    content: content.value,
+    collectionId: collectionId.value,
+  }
+}
+
+function rememberPersisted(snapshot: PersistSnapshot = currentSnapshot()) {
+  lastPersisted = snapshot
+}
+
+function isDirty(snapshot: PersistSnapshot = currentSnapshot()): boolean {
+  return (
+    snapshot.name !== lastPersisted.name ||
+    snapshot.content !== lastPersisted.content ||
+    snapshot.collectionId !== lastPersisted.collectionId
+  )
+}
+
+function clearAutosaveTimer() {
+  if (autosaveTimer !== undefined) {
+    clearTimeout(autosaveTimer)
+    autosaveTimer = undefined
+  }
+}
+
+function scheduleAutosave() {
+  clearAutosaveTimer()
+  if (!autosaveEnabled.value || loading.value) return
+  if (collectionId.value === NEW_FOLDER) return
+  if (!isDirty()) return
+
+  autosaveTimer = setTimeout(() => {
+    autosaveTimer = undefined
+    void runAutosave()
+  }, AUTOSAVE_DELAY_MS)
+}
+
+async function persistSvg(snapshot: PersistSnapshot = currentSnapshot()): Promise<string> {
   const folderId =
-    collectionId.value && collectionId.value !== NEW_FOLDER ? collectionId.value : null
+    snapshot.collectionId && snapshot.collectionId !== NEW_FOLDER ? snapshot.collectionId : null
 
   if (isEditing.value) {
     await updateSvg(route.params.id as string, {
-      name: name.value,
-      content: content.value,
+      name: snapshot.name,
+      content: snapshot.content,
       collectionId: folderId,
     })
     return route.params.id as string
   }
 
   const created = await createSvg({
-    name: name.value,
-    content: content.value,
+    name: snapshot.name,
+    content: snapshot.content,
     collectionId: folderId,
   })
   return created.id
 }
 
-async function save() {
+async function commitSave(exitAfter: boolean) {
+  clearAutosaveTimer()
   saving.value = true
   error.value = ''
+  const snapshot = currentSnapshot()
   try {
-    const id = await persistSvg()
+    const id = await persistSvg(snapshot)
+    rememberPersisted(snapshot)
+    if (exitAfter) {
+      await router.push({ name: 'list' })
+      return
+    }
     if (!isEditing.value) {
       await router.replace({ name: 'edit', params: { id } })
     }
@@ -215,12 +275,29 @@ async function save() {
   }
 }
 
+async function save() {
+  await commitSave(false)
+}
+
 async function saveAndExit() {
+  await commitSave(true)
+}
+
+async function runAutosave() {
+  if (!autosaveEnabled.value || loading.value || saving.value) return
+  if (collectionId.value === NEW_FOLDER) return
+  if (!isDirty()) return
+
   saving.value = true
   error.value = ''
+  const snapshot = currentSnapshot()
   try {
-    await persistSvg()
-    router.push({ name: 'list' })
+    const id = await persistSvg(snapshot)
+    rememberPersisted(snapshot)
+    if (!isEditing.value) {
+      await router.replace({ name: 'edit', params: { id } })
+    }
+    if (isDirty()) scheduleAutosave()
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to save SVG'
   } finally {
@@ -337,6 +414,15 @@ watch(content, () => {
   builderError.value = ''
 })
 
+watch([content, name, collectionId], () => {
+  scheduleAutosave()
+})
+
+watch(autosaveEnabled, (enabled) => {
+  if (enabled) scheduleAutosave()
+  else clearAutosaveTimer()
+})
+
 watch(selectedPaths, (paths) => {
   if (paths.length === 0 && !isIdentitySession(transformSession.value)) {
     transformSession.value = createIdentitySession()
@@ -348,6 +434,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  clearAutosaveTimer()
   window.removeEventListener('keydown', onEscapeTransform)
 })
 
@@ -438,6 +525,28 @@ function onPreviewUpdatePath(value: string) {
         </select>
       </div>
       <div class="page-header__actions">
+        <div class="editor-view__autosave">
+          <span class="editor-view__autosave-label">Autosave</span>
+          <button
+            type="button"
+            class="editor-view__autosave-track"
+            role="switch"
+            :aria-checked="autosaveEnabled"
+            aria-label="Autosave"
+            :title="
+              autosaveEnabled
+                ? 'Autosave on — click to save only manually'
+                : 'Autosave off — click to save changes automatically'
+            "
+            :disabled="loading"
+            @click="toggleAutosave"
+          >
+            <span
+              class="editor-view__autosave-thumb"
+              :class="{ 'editor-view__autosave-thumb--on': autosaveEnabled }"
+            />
+          </button>
+        </div>
         <button
           type="button"
           class="btn btn--secondary"
@@ -560,6 +669,69 @@ function onPreviewUpdatePath(value: string) {
     flex: 0 1 10rem;
     min-width: 7rem;
     max-width: 12rem;
+  }
+
+  &__autosave {
+    display: flex;
+    align-items: center;
+    gap: $spacing-xs;
+    margin-right: $spacing-xs;
+  }
+
+  &__autosave-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: $color-text-muted;
+    white-space: nowrap;
+  }
+
+  &__autosave-track {
+    position: relative;
+    width: 32px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid $color-border;
+    border-radius: 999px;
+    background: $color-bg;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+      background 0.15s,
+      border-color 0.15s;
+
+    &:hover:not(:disabled) {
+      border-color: var(--border-strong);
+    }
+
+    &:focus-visible {
+      outline: 2px solid $color-accent;
+      outline-offset: 2px;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  &__autosave-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: $color-text-muted;
+    transition:
+      transform 0.15s ease,
+      background 0.15s;
+
+    &--on {
+      transform: translateX(16px);
+      background: $color-accent;
+    }
   }
 
   &__error {
