@@ -217,9 +217,13 @@ function onTextInput(event: Event) {
   textDraft.value = (event.target as HTMLInputElement).value
 }
 
-function onTextEnter(event: KeyboardEvent) {
-  const value = (event.target as HTMLInputElement).value
+function commitText(input: HTMLInputElement) {
   isEditingText.value = false
+  const value = input.value
+  if (value === props.attribute.value) {
+    revertText(input)
+    return
+  }
   if (value.trim() === '') {
     commit('')
     return
@@ -228,10 +232,24 @@ function onTextEnter(event: KeyboardEvent) {
   commit(parsed ? formatPathD(parsed) : value)
 }
 
-function onTextBlur(event: FocusEvent) {
+function revertText(input: HTMLInputElement) {
   isEditingText.value = false
   textDraft.value = props.attribute.value
-  ;(event.target as HTMLInputElement).value = props.attribute.value
+  input.value = props.attribute.value
+}
+
+function onTextEnter(event: KeyboardEvent) {
+  commitText(event.target as HTMLInputElement)
+}
+
+function onTextBlur(event: FocusEvent) {
+  commitText(event.target as HTMLInputElement)
+}
+
+function onTextEscape(event: KeyboardEvent) {
+  // Keeps the keystroke away from the global shortcut that resets the selection.
+  event.stopPropagation()
+  revertText(event.target as HTMLInputElement)
 }
 
 function updateFieldValue(valueIndex: number, value: number) {
@@ -325,6 +343,7 @@ function penLabel(index: number): string {
       aria-label="d attribute value"
       @input="onTextInput"
       @keydown.enter="onTextEnter"
+      @keydown.escape="onTextEscape"
       @blur="onTextBlur"
     />
 

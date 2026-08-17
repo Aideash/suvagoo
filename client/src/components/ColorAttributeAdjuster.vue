@@ -127,6 +127,11 @@ function commitDraft() {
   }
 }
 
+function discardDraft() {
+  draft.value = props.attribute.value
+  caret.value = props.attribute.value.length
+}
+
 function applySuggestion(suggestion: ColorSuggestion) {
   draft.value = suggestion.value
   emit('update', suggestion.value)
@@ -169,6 +174,7 @@ function applySuggestion(suggestion: ColorSuggestion) {
         :aria-label="`${attribute.attrName} value`"
         @update:caret="caret = $event"
         @commit="commitDraft"
+        @discard="discardDraft"
         @select="applySuggestion"
       >
         <template #option="{ suggestion }">

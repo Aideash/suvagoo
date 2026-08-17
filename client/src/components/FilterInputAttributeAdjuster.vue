@@ -32,6 +32,10 @@ function commitDraft() {
   if (draft.value !== props.attribute.value) emit('update', draft.value)
 }
 
+function discardDraft() {
+  draft.value = props.attribute.value
+}
+
 function applySuggestion(suggestion: FilterInputOption) {
   draft.value = suggestion.value
   emit('update', suggestion.value)
@@ -46,6 +50,7 @@ function applySuggestion(suggestion: FilterInputOption) {
       :aria-label="`${attribute.attrName} filter input`"
       open-on-click
       @commit="commitDraft"
+      @discard="discardDraft"
       @select="applySuggestion"
     >
       <template #option="{ suggestion }">

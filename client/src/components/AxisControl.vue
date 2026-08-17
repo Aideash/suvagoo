@@ -86,18 +86,40 @@ function onTextInput(event: Event) {
   textDraft.value = (event.target as HTMLInputElement).value
 }
 
-function onTextEnter(event: KeyboardEvent) {
+function commitText(input: HTMLInputElement) {
   isEditingText.value = false
-  const parsed = parseNumericValue((event.target as HTMLInputElement).value)
-  if (!parsed) return
+  const parsed = parseNumericValue(input.value)
+  if (!parsed) {
+    revertText(input)
+    return
+  }
   const typed = parsed.unit.trim()
-  emit('update', parsed.number, typed && acceptsUnits.value ? typed : props.unit)
+  const unit = typed && acceptsUnits.value ? typed : props.unit
+  if (parsed.number === props.value && unit === props.unit) {
+    revertText(input)
+    return
+  }
+  emit('update', parsed.number, unit)
+}
+
+function revertText(input: HTMLInputElement) {
+  isEditingText.value = false
+  textDraft.value = String(props.value)
+  input.value = String(props.value)
+}
+
+function onTextEnter(event: KeyboardEvent) {
+  commitText(event.target as HTMLInputElement)
 }
 
 function onTextBlur(event: FocusEvent) {
-  isEditingText.value = false
-  textDraft.value = String(props.value)
-  ;(event.target as HTMLInputElement).value = String(props.value)
+  commitText(event.target as HTMLInputElement)
+}
+
+function onTextEscape(event: KeyboardEvent) {
+  // Keeps the keystroke away from the global shortcut that resets the selection.
+  event.stopPropagation()
+  revertText(event.target as HTMLInputElement)
 }
 
 function nudge(delta: number) {
@@ -199,6 +221,7 @@ function normalizeRange() {
           @input="onTextInput"
           @keydown.alt.enter.exact="roundToNearestStep"
           @keydown.enter.exact="onTextEnter"
+          @keydown.escape="onTextEscape"
           @blur="onTextBlur"
         />
         <span v-if="hasUnitAffix" class="axis-control__unit">

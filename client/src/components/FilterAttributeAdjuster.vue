@@ -271,6 +271,7 @@ function onTextInput(value: string) {
 function onTextCommit() {
   const value = textDraft.value
   isEditingText.value = false
+  if (value === props.attribute.value) return
   if (value.trim() === '') {
     commit('')
     return
@@ -279,9 +280,10 @@ function onTextCommit() {
   commit(parsed ? formatFilterList(parsed) : value)
 }
 
-function onTextBlur() {
+function onTextDiscard() {
   isEditingText.value = false
   textDraft.value = props.attribute.value
+  caret.value = props.attribute.value.length
 }
 
 function applyIdSuggestion(suggestion: { value: string; caret: number }) {
@@ -366,12 +368,11 @@ function moveSelected(delta: -1 | 1) {
       ref="textInput"
       :model-value="textDraft"
       :suggestions="idSuggestions"
-      commit-on="enter"
       aria-label="filter attribute value"
       @update:model-value="onTextInput"
       @update:caret="caret = $event"
       @commit="onTextCommit"
-      @blur="onTextBlur"
+      @discard="onTextDiscard"
       @select="applyIdSuggestion"
     >
       <template #option="{ suggestion }">
@@ -480,6 +481,7 @@ function moveSelected(delta: -1 | 1) {
             aria-label="Filter reference"
             @update:model-value="referenceDraft = $event"
             @commit="commitReference(referenceDraft)"
+            @discard="referenceDraft = selectedReference ?? ''"
             @select="commitReference(`#${$event.id}`)"
           >
             <template #option="{ suggestion }">

@@ -771,10 +771,10 @@ export function defaultCommandValues(
     case 'V':
       return [offset.y]
     case 'C':
-      return [base.x, base.y, offset.x, offset.y, offset.x + step, offset.y]
+      return [offset.x, base.y, offset.x, offset.y, offset.x + step, offset.y]
     case 'S':
     case 'Q':
-      return [base.x, base.y, offset.x, offset.y]
+      return [offset.x, base.y, offset.x, offset.y]
     case 'A':
       return [step, step, 0, 0, 1, offset.x, offset.y]
     case 'Z':

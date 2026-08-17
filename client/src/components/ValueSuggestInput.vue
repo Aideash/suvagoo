@@ -7,11 +7,6 @@ const props = defineProps<{
   modelValue: string
   /** Completions for the current value and caret, in display order. */
   suggestions: readonly T[]
-  /**
-   * When to raise `commit`. 'enter' suits callers that discard the draft on
-   * blur, which the native change event would otherwise pre-empt.
-   */
-  commitOn?: 'change' | 'enter'
   /** Open the available choices when the existing value is clicked. */
   openOnClick?: boolean
 }>()
@@ -21,8 +16,9 @@ const emit = defineEmits<{
   'update:caret': [caret: number]
   /** The user finished editing without picking a suggestion. */
   commit: []
+  /** The user abandoned the edit, so the caller should restore its own value. */
+  discard: []
   select: [suggestion: T]
-  blur: []
 }>()
 
 const listboxId = useId()
@@ -70,11 +66,6 @@ function closeListbox() {
 
 function onBlur() {
   closeListbox()
-  emit('blur')
-}
-
-function onChange() {
-  if (props.commitOn !== 'enter') emit('commit')
 }
 
 /**
@@ -126,10 +117,18 @@ function onEnter() {
   emit('commit')
 }
 
+/**
+ * Escape dismisses the suggestions first, so a second press is what abandons
+ * the edit. Either way the keystroke stays out of the editor's global
+ * shortcuts.
+ */
 function onEscape(event: KeyboardEvent) {
-  if (!showSuggestions.value) return
   event.stopPropagation()
-  closeListbox()
+  if (showSuggestions.value) {
+    closeListbox()
+    return
+  }
+  emit('discard')
 }
 
 function onPointerDown(event: MouseEvent) {
@@ -186,11 +185,11 @@ defineExpose({
     @click="onClick"
     @keyup="syncCaret"
     @blur="onBlur"
-    @change="onChange"
+    @change="emit('commit')"
     @keydown.down.prevent="moveActive(1)"
     @keydown.up.prevent="moveActive(-1)"
     @keydown.enter.prevent="onEnter"
-    @keydown.esc="onEscape"
+    @keydown.escape="onEscape"
     @keydown.tab="closeListbox"
   />
 

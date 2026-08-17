@@ -128,16 +128,34 @@ function onTextInput(event: Event) {
   textDraft.value = (event.target as HTMLInputElement).value
 }
 
-function onTextEnter(event: KeyboardEvent) {
-  const value = (event.target as HTMLInputElement).value
+function commitText(input: HTMLInputElement) {
   isEditingText.value = false
-  commit(value.trim())
+  const value = input.value.trim()
+  if (value === props.attribute.value) {
+    revertText(input)
+    return
+  }
+  commit(value)
+}
+
+function revertText(input: HTMLInputElement) {
+  isEditingText.value = false
+  textDraft.value = props.attribute.value
+  input.value = props.attribute.value
+}
+
+function onTextEnter(event: KeyboardEvent) {
+  commitText(event.target as HTMLInputElement)
 }
 
 function onTextBlur(event: FocusEvent) {
-  isEditingText.value = false
-  textDraft.value = props.attribute.value
-  ;(event.target as HTMLInputElement).value = props.attribute.value
+  commitText(event.target as HTMLInputElement)
+}
+
+function onTextEscape(event: KeyboardEvent) {
+  // Keeps the keystroke away from the global shortcut that resets the selection.
+  event.stopPropagation()
+  revertText(event.target as HTMLInputElement)
 }
 
 function updateSelected(number: number, unit: string) {
@@ -198,6 +216,7 @@ function moveSelected(delta: -1 | 1) {
       aria-label="stroke-dasharray value"
       @input="onTextInput"
       @keydown.enter="onTextEnter"
+      @keydown.escape="onTextEscape"
       @blur="onTextBlur"
     />
 

@@ -171,6 +171,17 @@ function commitDraft() {
   }
 }
 
+function discardDraft() {
+  draft.value = props.attribute.value
+  caret.value = props.attribute.value.length
+}
+
+function onDraftEscape(event: KeyboardEvent) {
+  // Keeps the keystroke away from the global shortcut that resets the selection.
+  event.stopPropagation()
+  discardDraft()
+}
+
 function onLengthUpdate(value: number, unit: string) {
   const next = formatNumericValue(value, unit)
   if (unit !== lengthUnit.value) {
@@ -264,6 +275,7 @@ function setEnumValue(value: string) {
           class="input attr-adjuster__number"
           @change="commitDraft"
           @keydown.enter="commitDraft"
+          @keydown.escape="onDraftEscape"
         />
         <button type="button" class="attr-adjuster__step-btn" @click="nudge(1)">+</button>
       </div>
@@ -286,6 +298,7 @@ function setEnumValue(value: string) {
           class="input attr-adjuster__number"
           @change="commitDraft"
           @keydown.enter="commitDraft"
+          @keydown.escape="onDraftEscape"
         />
         <button type="button" class="attr-adjuster__step-btn" @click="nudge(1)">+</button>
       </div>
@@ -390,6 +403,7 @@ function setEnumValue(value: string) {
         :aria-describedby="idConflict ? idWarnId : undefined"
         @update:caret="caret = $event"
         @commit="commitDraft"
+        @discard="discardDraft"
         @select="applyIdSuggestion"
       >
         <template #option="{ suggestion }">

@@ -390,7 +390,8 @@ function onAttributeUpdate(value: string) {
 
       <section class="svg-explorer__section">
         <h3 class="svg-explorer__heading">Document</h3>
-        <p class="svg-explorer__hint">Click to select · ⌘/Ctrl+click toggle · Shift+click range</p>
+        <p class="svg-explorer__hint">Click to select</p>
+        <p class="svg-explorer__hint">Bulk Transform: ⌘/Ctrl+click toggle · Shift+click range</p>
         <ul v-if="flatTree.length" class="svg-explorer__tree">
           <li
             v-for="row in flatTree"
