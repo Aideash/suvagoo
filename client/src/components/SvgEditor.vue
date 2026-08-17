@@ -5,7 +5,10 @@ import { EditorView, basicSetup } from 'codemirror'
 import { xml } from '@codemirror/lang-xml'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
+import PopMenu from './PopMenu.vue'
+import { copyText } from '../lib/clipboard'
 import { cursorOffsetForPath, findElementAtOffset } from '../lib/svgDocument'
+import { buildSvgCopy, type SvgCopyFormat } from '../lib/svgCopy'
 import { formatSvgSource, type SvgFormatLayout } from '../lib/svgFormat'
 
 const props = defineProps<{
@@ -16,16 +19,32 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
   cursorChange: [offset: number]
   formatError: [message: string]
+  copyError: [message: string]
 }>()
+
+const COPY_OPTIONS: { format: SvgCopyFormat; name: string; hint: string }[] = [
+  { format: 'pretty', name: 'Pretty', hint: 'Indented, one attribute per line' },
+  { format: 'compact', name: 'Compact', hint: 'Indented, one element per line' },
+  { format: 'single', name: 'Single line', hint: 'The whole document, no newlines' },
+  {
+    format: 'dataUri',
+    name: 'CSS data URI',
+    hint: 'Encoded for url(), data:image/svg+xml, included',
+  },
+]
+
+const COPIED_FEEDBACK_MS = 1600
 
 const container = ref<HTMLElement | null>(null)
 const lineWrap = ref(false)
 const showEditor = ref(true)
 /** Only lights up the button that was last used; formatting is never automatic. */
 const lastLayout = ref<SvgFormatLayout | null>(null)
+const copied = ref(false)
 const wrapCompartment = new Compartment()
 let view: EditorView | null = null
 let applyingExternal = false
+let copiedTimer: ReturnType<typeof setTimeout> | undefined
 
 const editorTheme = EditorView.theme({
   '&': { color: 'var(--text)', backgroundColor: 'var(--bg-input)', height: '100%' },
@@ -82,6 +101,25 @@ function applyFormat(layout: SvgFormatLayout) {
   const path = findElementAtOffset(current, head)?.path
   const cursor = (path ? cursorOffsetForPath(formatted, path) : null) ?? head
   applyChange(formatted, cursor)
+}
+
+/** Copies a rendering of the document; the document itself is left alone. */
+async function copy(format: SvgCopyFormat) {
+  const source = view?.state.doc.toString() ?? props.modelValue
+  const text = buildSvgCopy(source, format)
+  if (text == null) {
+    emit('copyError', 'Could not copy the document. Check for unclosed or mismatched tags.')
+    return
+  }
+
+  try {
+    await copyText(text)
+    copied.value = true
+    clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => (copied.value = false), COPIED_FEEDBACK_MS)
+  } catch (caught) {
+    emit('copyError', `Copy failed: ${caught instanceof Error ? caught.message : String(caught)}`)
+  }
 }
 
 function emitCursor() {
@@ -156,6 +194,7 @@ function applyChange(newContent: string, cursor: number) {
 defineExpose({ applyChange, setCursor })
 
 onBeforeUnmount(() => {
+  clearTimeout(copiedTimer)
   view?.destroy()
   view = null
 })
@@ -195,6 +234,31 @@ onBeforeUnmount(() => {
         <span class="material-icons sm">unfold_less</span>
         <span class="svg-editor__tool-label">Compact</span>
       </button>
+      <span class="svg-editor__divider" />
+      <span class="svg-editor__copy">
+        <PopMenu
+          :icon="copied ? 'check' : 'content_copy'"
+          :label="copied ? 'Copied' : 'Copy SVG'"
+          title="Copy the document to the clipboard"
+          :width="300"
+          align="left"
+        >
+          <template #default="{ close }">
+            <button
+              v-for="option in COPY_OPTIONS"
+              :key="option.format"
+              type="button"
+              class="copy-option"
+              :title="`${option.name} — ${option.hint}`"
+              @click="(copy(option.format), close())"
+            >
+              <span class="copy-option__name">{{ option.name }}</span>
+              <span class="copy-option__hint">{{ option.hint }}</span>
+            </button>
+          </template>
+        </PopMenu>
+      </span>
+      <span class="svg-editor__divider" />
       <button
         type="button"
         class="ghost svg-editor__preview-toggle"
@@ -230,7 +294,7 @@ onBeforeUnmount(() => {
     padding: $spacing-xs $spacing-sm;
     border-bottom: 1px solid $color-border;
 
-    .svg-editor__preview-toggle {
+    .svg-editor__copy {
       margin-left: auto;
     }
   }
@@ -239,6 +303,13 @@ onBeforeUnmount(() => {
     width: 1px;
     height: 16px;
     background: $color-border;
+  }
+
+  /* The menu trigger is a shared ghost button; this sizes it like a tool. */
+  &__copy :deep(button) {
+    padding: 2px $spacing-sm;
+    font-size: 0.75rem;
+    font-weight: 500;
   }
 
   &__tool {
@@ -290,6 +361,33 @@ onBeforeUnmount(() => {
   &__content-hidden {
     grid-template-rows: min-content 0fr;
     overflow: hidden;
+  }
+}
+
+/* Teleported into the pop menu, so it sits outside .svg-editor. */
+.copy-option {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 8px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+
+  &:hover {
+    background: $color-surface-hover;
+  }
+
+  &__name {
+    font-size: 0.8125rem;
+    color: $color-text;
+  }
+
+  &__hint {
+    font-size: 0.6875rem;
+    color: var(--text-faint);
   }
 }
 </style>

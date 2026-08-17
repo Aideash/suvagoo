@@ -511,6 +511,7 @@ function onPreviewUpdatePath(value: string) {
             v-model="content"
             @cursor-change="cursorOffset = $event"
             @format-error="builderError = $event"
+            @copy-error="builderError = $event"
           />
         </section>
         <section class="editor-view__pane editor-view__pane--preview">

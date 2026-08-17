@@ -2,6 +2,9 @@
 
 export type SvgFormatLayout = 'pretty' | 'compact'
 
+/** `single` is a copy target rather than an editor layout, so it is not public. */
+type PrintLayout = SvgFormatLayout | 'single'
+
 const INDENT = '  '
 const MAX_LINE_WIDTH = 100
 /** Above this an element earns a line per attribute, even when it would fit. */
@@ -207,11 +210,13 @@ function hasRenderedText(node: Extract<FormatNode, { kind: 'element' }>): boolea
   return node.children.some((child) => child.kind === 'text' && child.text.trim() !== '')
 }
 
+function keepsWhitespace(node: Extract<FormatNode, { kind: 'element' }>): boolean {
+  return node.attrs.some((attr) => attr.name === 'xml:space' && attr.value.trim() === 'preserve')
+}
+
 function isPreserved(node: Extract<FormatNode, { kind: 'element' }>): boolean {
   if (PRESERVE_TAGS.has(node.name.toLowerCase().replace(/^.*:/, ''))) return true
-  if (node.attrs.some((attr) => attr.name === 'xml:space' && attr.value.trim() === 'preserve')) {
-    return true
-  }
+  if (keepsWhitespace(node)) return true
   return hasRenderedText(node)
 }
 
@@ -224,9 +229,18 @@ function attributeValue(attr: Attribute): string {
   return attr.value.trim().replace(/\s+/g, ' ')
 }
 
-function renderAttribute(attr: Attribute): string {
+function flattenLines(text: string): string {
+  return text.replace(/\s*\n\s*/g, ' ')
+}
+
+/**
+ * `flatten` is for single-line output. XML normalizes newlines in an attribute
+ * value to spaces, so removing them changes how the value reads and nothing else.
+ */
+function renderAttribute(attr: Attribute, flatten = false): string {
   if (attr.bare) return attr.name
-  return `${attr.name}=${attr.quote}${attributeValue(attr)}${attr.quote}`
+  const value = flatten ? flattenLines(attributeValue(attr)) : attributeValue(attr)
+  return `${attr.name}=${attr.quote}${value}${attr.quote}`
 }
 
 function openTagTail(node: Extract<FormatNode, { kind: 'element' }>): string {
@@ -237,8 +251,8 @@ function openTagTail(node: Extract<FormatNode, { kind: 'element' }>): string {
   return '>'
 }
 
-function inlineOpenTag(node: Extract<FormatNode, { kind: 'element' }>): string {
-  const attrs = node.attrs.map(renderAttribute).join(' ')
+function inlineOpenTag(node: Extract<FormatNode, { kind: 'element' }>, flatten = false): string {
+  const attrs = node.attrs.map((attr) => renderAttribute(attr, flatten)).join(' ')
   return `<${node.name}${attrs ? ` ${attrs}` : ''}${openTagTail(node)}`
 }
 
@@ -374,31 +388,43 @@ function pushIndented(lines: string[], text: string, indent: string) {
 function printNodes(
   nodes: FormatNode[],
   depth: number,
-  layout: SvgFormatLayout,
+  layout: PrintLayout,
   source: string,
   lines: string[],
 ) {
-  const indent = INDENT.repeat(depth)
+  const flat = layout === 'single'
+  const indent = flat ? '' : INDENT.repeat(depth)
+
+  /**
+   * Single-line chunks are pushed whole: the caller joins them without a
+   * separator, so a chunk split across entries would lose its own newlines.
+   */
+  const push = (text: string) => {
+    if (flat) lines.push(text)
+    else pushIndented(lines, text, indent)
+  }
 
   for (const node of nodes) {
     if (node.kind === 'text') {
       const trimmed = node.text.trim()
-      if (trimmed) pushIndented(lines, trimmed, indent)
+      if (trimmed) push(flat ? flattenLines(trimmed) : trimmed)
       continue
     }
 
     if (node.kind === 'raw') {
-      pushIndented(lines, node.text, indent)
+      push(flat ? flattenLines(node.text) : node.text)
       continue
     }
 
     if (isPreserved(node)) {
-      pushIndented(lines, source.slice(node.start, node.end), indent)
+      const verbatim = source.slice(node.start, node.end)
+      // Whitespace the author declared significant keeps its newlines.
+      push(flat && !keepsWhitespace(node) ? flattenLines(verbatim) : verbatim)
       continue
     }
 
     const tail = openTagTail(node)
-    const inline = inlineOpenTag(node)
+    const inline = inlineOpenTag(node, flat)
     const wrap =
       layout === 'pretty' &&
       (node.attrs.length > INLINE_ATTRIBUTE_LIMIT ||
@@ -422,6 +448,15 @@ function printNodes(
   }
 }
 
+function layoutLines(content: string, layout: PrintLayout): string[] | null {
+  const nodes = scanNodes(content)
+  if (!nodes) return null
+
+  const lines: string[] = []
+  printNodes(nodes, 0, layout, content, lines)
+  return lines
+}
+
 /**
  * Returns null when the source cannot be reformatted safely, so callers can
  * report the failure instead of writing mangled markup back.
@@ -429,10 +464,16 @@ function printNodes(
 export function formatSvgSource(content: string, layout: SvgFormatLayout): string | null {
   if (!content.trim()) return content
 
-  const nodes = scanNodes(content)
-  if (!nodes) return null
+  return layoutLines(content, layout)?.join('\n') ?? null
+}
 
-  const lines: string[] = []
-  printNodes(nodes, 0, layout, content, lines)
-  return lines.join('\n')
+/**
+ * The whole document on one line. Chunks are joined with nothing between them:
+ * a space between two tags is text content, which some elements render.
+ * Newlines survive only inside `xml:space="preserve"`, where they are content.
+ */
+export function formatSvgSingleLine(content: string): string | null {
+  if (!content.trim()) return content.trim()
+
+  return layoutLines(content, 'single')?.join('') ?? null
 }
