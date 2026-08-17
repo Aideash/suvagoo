@@ -21,6 +21,7 @@ import {
 } from '../lib/svgDocument'
 import SvgAttributeAdjuster from './SvgAttributeAdjuster.vue'
 import BulkTransformPanel from './BulkTransformPanel.vue'
+import NumericAttributeScrubPanel from './NumericAttributeScrubPanel.vue'
 import { useSnippetMode } from '../composables/useSnippetMode'
 import type { TransformSessionValues } from '../lib/transformSession'
 
@@ -56,7 +57,8 @@ const emit = defineEmits<{
 const { isPreFilled, toggleSnippetMode } = useSnippetMode()
 
 const filter = ref('')
-const deleteMode = ref(false)
+const explorerMode = ref<'insert' | 'scrub' | 'delete'>('insert')
+const deleteMode = computed(() => explorerMode.value === 'delete')
 const showAllAttributes = ref(false)
 const showAllChildren = ref(false)
 const selectedPointIndex = ref<number | null>(null)
@@ -85,14 +87,11 @@ watch(deleteMode, (enabled) => {
 })
 
 function toggleDeleteMode() {
-  deleteMode.value = !deleteMode.value
+  explorerMode.value = deleteMode.value ? 'insert' : 'delete'
 }
 
-function onModeKeydown(event: KeyboardEvent) {
-  if (event.key === 'Enter' || event.key === ' ') {
-    event.preventDefault()
-    toggleDeleteMode()
-  }
+function setExplorerMode(mode: 'insert' | 'scrub' | 'delete') {
+  explorerMode.value = mode
 }
 
 function onGlobalKeydown(event: KeyboardEvent) {
@@ -314,10 +313,20 @@ function onAttributeUpdate(value: string) {
   if (!activeAttribute.value) return
   emit('updateAttribute', activeAttribute.value.path, activeAttribute.value.attrName, value)
 }
+
+function onScrubUpdate(path: PathSegment[], name: string, value: string) {
+  emit('updateAttribute', path, name, value)
+}
 </script>
 
 <template>
-  <div class="svg-explorer" :class="{ 'svg-explorer--delete': deleteMode }">
+  <div
+    class="svg-explorer"
+    :class="{
+      'svg-explorer--scrub': explorerMode === 'scrub',
+      'svg-explorer--delete': deleteMode,
+    }"
+  >
     <div class="svg-explorer__toolbar">
       <input
         v-model="filter"
@@ -326,46 +335,45 @@ function onAttributeUpdate(value: string) {
         :placeholder="
           deleteMode
             ? 'Filter existing elements and attributes…'
-            : 'Filter elements and attributes…'
+            : explorerMode === 'scrub'
+              ? 'Filter numeric attributes…'
+              : 'Filter elements and attributes…'
         "
         :disabled="!context && !flatTree.length"
       />
       <div class="svg-explorer__mode">
-        <span
-          class="svg-explorer__mode-label"
-          :class="{ 'svg-explorer__mode-label--delete': deleteMode }"
-        >
-          {{ deleteMode ? 'Delete Mode' : 'Insert Mode' }}
-        </span>
-        <div class="svg-explorer__mode-toggle">
-          <span
-            class="material-icons sm svg-explorer__mode-icon"
-            :class="{ active: !deleteMode }"
-            aria-hidden="true"
-          >
-            add
-          </span>
+        <span class="svg-explorer__mode-label">Explorer mode</span>
+        <div class="svg-explorer__mode-options" role="group" aria-label="Explorer mode">
           <button
             type="button"
-            class="svg-explorer__mode-track"
-            role="switch"
-            :aria-checked="deleteMode"
-            :aria-label="deleteMode ? 'Switch to insert mode' : 'Switch to delete mode'"
-            @click="toggleDeleteMode"
-            @keydown="onModeKeydown"
+            class="svg-explorer__mode-button"
+            :class="{ active: explorerMode === 'insert' }"
+            :aria-pressed="explorerMode === 'insert'"
+            @click="setExplorerMode('insert')"
           >
-            <span
-              class="svg-explorer__mode-thumb"
-              :class="{ 'svg-explorer__mode-thumb--delete': deleteMode }"
-            />
+            <span class="material-icons sm" aria-hidden="true">add</span>
+            Insert
           </button>
-          <span
-            class="material-icons sm svg-explorer__mode-icon"
-            :class="{ active: deleteMode }"
-            aria-hidden="true"
+          <button
+            type="button"
+            class="svg-explorer__mode-button"
+            :class="{ active: explorerMode === 'scrub' }"
+            :aria-pressed="explorerMode === 'scrub'"
+            @click="setExplorerMode('scrub')"
           >
-            delete
-          </span>
+            <span class="material-icons sm" aria-hidden="true">swap_horiz</span>
+            Scrub
+          </button>
+          <button
+            type="button"
+            class="svg-explorer__mode-button svg-explorer__mode-button--delete"
+            :class="{ active: explorerMode === 'delete' }"
+            :aria-pressed="explorerMode === 'delete'"
+            @click="setExplorerMode('delete')"
+          >
+            <span class="material-icons sm" aria-hidden="true">delete</span>
+            Delete
+          </button>
         </div>
       </div>
     </div>
@@ -462,7 +470,17 @@ function onAttributeUpdate(value: string) {
         </p>
       </template>
 
-      <template v-else>
+      <NumericAttributeScrubPanel
+        v-else-if="explorerMode === 'scrub' && context"
+        :content="content"
+        :context="context"
+        :filter="filter"
+        :active-attribute-name="activeAttribute?.attrName"
+        @update="onScrubUpdate"
+        @select="onAttributeChipClick"
+      />
+
+      <template v-else-if="explorerMode === 'insert'">
         <section v-if="schema?.children.length" class="svg-explorer__section">
           <div class="svg-explorer__section-header">
             <h3 class="svg-explorer__heading">Child elements</h3>
@@ -618,6 +636,10 @@ function onAttributeUpdate(value: string) {
     border-color: color-mix(in srgb, var(--red) 45%, transparent);
   }
 
+  &--scrub {
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+
   &__toolbar {
     display: flex;
     flex-direction: column;
@@ -638,57 +660,48 @@ function onAttributeUpdate(value: string) {
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: $color-accent;
-
-    &--delete {
-      color: $color-danger;
-    }
+    color: $color-text-muted;
   }
 
-  &__mode-toggle {
+  &__mode-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 2px;
+    border: 1px solid $color-border;
+    border-radius: $radius-sm;
+    background: color-mix(in srgb, var(--border) 25%, transparent);
+  }
+
+  &__mode-button {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: $spacing-sm;
-  }
-
-  &__mode-icon {
+    gap: 3px;
+    min-width: 0;
+    padding: 4px;
+    border: 0;
+    border-radius: calc($radius-sm - 1px);
+    background: transparent;
     color: $color-text-muted;
-    opacity: 0.45;
-    transition:
-      color 0.15s,
-      opacity 0.15s;
+    font-size: 0.6875rem;
+
+    &:hover {
+      color: $color-text;
+    }
+
+    &:focus-visible {
+      outline: 2px solid $color-accent;
+      outline-offset: 1px;
+    }
 
     &.active {
-      color: inherit;
-      opacity: 1;
+      background: $color-bg;
+      color: $color-accent;
+      box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 12%, transparent);
     }
-  }
 
-  &--delete &__mode-icon.active {
-    color: $color-danger;
-  }
-
-  &:not(&--delete) &__mode-icon.active {
-    color: $color-accent;
-  }
-
-  &__mode-track {
-    @include switch-track(36px, 20px);
-  }
-
-  &--delete &__mode-track {
-    background: color-mix(in srgb, var(--red) 8%, transparent);
-    border-color: color-mix(in srgb, var(--red) 35%, transparent);
-  }
-
-  &__mode-thumb {
-    @include switch-thumb(14px);
-    background: $color-accent;
-
-    &--delete {
-      transform: translateX(16px);
-      background: $color-danger;
+    &--delete.active {
+      color: $color-danger;
     }
   }
 
