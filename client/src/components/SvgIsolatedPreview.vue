@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import DOMPurify from 'dompurify'
 import CoordinateReadout from './CoordinateReadout.vue'
 import HandleOverlay from './HandleOverlay.vue'
 import type { IsolatedPreviewModel } from '../lib/isolatedPreview'
 import type { PathEditState, PointsEditState } from '../lib/handleEdit'
 import type { Point2D } from '../lib/pointsAttribute'
+import { sanitizeSvgMarkup } from '../lib/previewMarkup'
 import { clientToSvgPoint, containsClientPoint } from '../lib/svgPointer'
 import { formatViewBoxValue } from '../lib/svgSchema'
 
@@ -28,13 +28,7 @@ const emit = defineEmits<{
   updatePath: [value: string]
 }>()
 
-const sanitized = computed(() =>
-  props.preview.content
-    ? DOMPurify.sanitize(props.preview.content, {
-        USE_PROFILES: { svg: true, svgFilters: true },
-      })
-    : '',
-)
+const sanitized = computed(() => sanitizeSvgMarkup(props.preview.content))
 
 const viewBoxLabel = computed(() => formatViewBoxValue(props.preview.viewBox))
 

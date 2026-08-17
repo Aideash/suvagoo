@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import DOMPurify from 'dompurify'
 import type { DefsPreviewModel } from '../lib/defsPreview'
+import { sanitizeSvgMarkup } from '../lib/previewMarkup'
 
 const props = defineProps<{
   preview: DefsPreviewModel
@@ -10,11 +10,7 @@ const props = defineProps<{
 const entries = computed(() =>
   props.preview.entries.map((entry) => ({
     ...entry,
-    sanitized: entry.content
-      ? DOMPurify.sanitize(entry.content, {
-          USE_PROFILES: { svg: true, svgFilters: true },
-        })
-      : '',
+    sanitized: sanitizeSvgMarkup(entry.content),
   })),
 )
 </script>
