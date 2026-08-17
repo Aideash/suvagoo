@@ -21,8 +21,10 @@ import {
   type PathCommand,
   type PathCommandType,
 } from '../lib/pathAttribute'
+import { canCompletePath } from '../lib/pathCompletion'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
 import AxisControl from './AxisControl.vue'
+import PathCompletionModal from './PathCompletionModal.vue'
 
 const props = defineProps<{
   attribute: AttributeContext
@@ -39,6 +41,7 @@ const textDraft = ref(props.attribute.value)
 const isEditingText = ref(false)
 const selectedIndex = ref<number | null>(null)
 const showAddMenu = ref(false)
+const showCompletion = ref(false)
 
 const viewBox = computed(() =>
   viewBoxForAttribute(props.content, props.attribute.path, props.attribute.attrName),
@@ -164,6 +167,7 @@ watch(
     textDraft.value = props.attribute.value
     selectedIndex.value = null
     showAddMenu.value = false
+    showCompletion.value = false
     emit('selectCommand', null)
   },
   { immediate: true },
@@ -294,6 +298,15 @@ const addableCommands = computed(() =>
   ALL_ADDABLE_COMMANDS.filter((t) => t !== 'Z' || canAddZ.value),
 )
 
+const canComplete = computed(() => canCompletePath(parsedCommands.value))
+
+function applyCompletion(commands: PathCommand[]) {
+  const appendedFrom = parsedCommands.value?.length ?? 0
+  commitCommands(commands)
+  showCompletion.value = false
+  selectCommand(appendedFrom < commands.length ? appendedFrom : null)
+}
+
 function penLabel(index: number): string {
   const commands = parsedCommands.value
   if (!commands) return ''
@@ -404,6 +417,15 @@ function penLabel(index: number): string {
         >
           ↓
         </button>
+        <button
+          v-if="canComplete"
+          type="button"
+          class="path-adjuster__op-btn path-adjuster__op-btn--trailing"
+          title="Complete path — retrace, reflect, or copy back"
+          @click="showCompletion = true"
+        >
+          <span class="material-icons sm">u_turn_left</span>
+        </button>
       </div>
 
       <template v-if="selectedCommand && selectedCommand.type !== 'Z'">
@@ -450,6 +472,14 @@ function penLabel(index: number): string {
     <p v-else-if="!parseError" class="path-adjuster__empty-hint">
       Path is empty — use + to add a Move to (M) command.
     </p>
+
+    <PathCompletionModal
+      v-if="showCompletion && canComplete && parsedCommands"
+      :commands="parsedCommands"
+      :view-box="viewBox"
+      @apply="applyCompletion"
+      @close="showCompletion = false"
+    />
   </div>
 </template>
 
@@ -618,6 +648,9 @@ function penLabel(index: number): string {
   }
 
   &__op-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
     width: 28px;
     height: 28px;
@@ -641,6 +674,14 @@ function penLabel(index: number): string {
     &:disabled {
       opacity: 0.35;
       cursor: not-allowed;
+    }
+
+    &--trailing {
+      margin-left: auto;
+    }
+
+    .material-icons {
+      vertical-align: 0;
     }
   }
 

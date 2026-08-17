@@ -8,10 +8,7 @@ import {
   isIdentitySession,
   type TransformSessionValues,
 } from '../lib/transformSession'
-import {
-  ANGLE_TRANSFORM_RANGE,
-  SCALE_TRANSFORM_RANGE,
-} from '../lib/transformAttribute'
+import { ANGLE_TRANSFORM_RANGE, SCALE_TRANSFORM_RANGE } from '../lib/transformAttribute'
 import AxisControl from './AxisControl.vue'
 
 const props = defineProps<{
@@ -42,9 +39,7 @@ const pivotRangeY = computed(() =>
   numericRangeForAttribute('y', viewBox.value, String(props.session.cy)),
 )
 
-const bakePlan = computed(() =>
-  describeBakePlan(props.content, props.selectedPaths, props.session),
-)
+const bakePlan = computed(() => describeBakePlan(props.content, props.selectedPaths, props.session))
 
 const canCommit = computed(
   () => props.selectedPaths.length > 0 && !isIdentitySession(props.session),
@@ -97,9 +92,7 @@ function uniqueTags(tags: string[]): string {
   <section class="bulk-transform">
     <div class="bulk-transform__header">
       <h3 class="bulk-transform__heading">Transform</h3>
-      <p class="bulk-transform__meta">
-        {{ selectedPaths.length }} selected
-      </p>
+      <p class="bulk-transform__meta">{{ selectedPaths.length }} selected</p>
     </div>
 
     <p v-if="bakeWarning" class="bulk-transform__warn">{{ bakeWarning }}</p>

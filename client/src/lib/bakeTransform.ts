@@ -8,12 +8,7 @@ import {
   type AffineMatrix,
   type TransformSessionValues,
 } from './affine'
-import {
-  formatPathD,
-  parsePathD,
-  toggleRelative,
-  type PathCommand,
-} from './pathAttribute'
+import { commandsToAbsolute, formatPathD, parsePathD, type PathCommand } from './pathAttribute'
 import { formatPoints, parsePoints } from './pointsAttribute'
 import {
   findElementByPath,
@@ -43,16 +38,6 @@ function parseNumber(raw: string | undefined, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback
 }
 
-function commandsToAbsolute(commands: PathCommand[]): PathCommand[] {
-  let next = commands.map((c) => ({ ...c, values: [...c.values] }))
-  for (let i = 0; i < next.length; i++) {
-    if (next[i].relative) {
-      next = toggleRelative(next, i)
-    }
-  }
-  return next
-}
-
 /**
  * Approximate one elliptical arc segment as cubic beziers (absolute coords).
  * Uses the standard center-parameterization approach with ≤90° segments.
@@ -80,8 +65,8 @@ function arcToCubics(
 
   const dx = (x1 - x2) / 2
   const dy = (y1 - y2) / 2
-  let x1p = cosPhi * dx + sinPhi * dy
-  let y1p = -sinPhi * dx + cosPhi * dy
+  const x1p = cosPhi * dx + sinPhi * dy
+  const y1p = -sinPhi * dx + cosPhi * dy
 
   let rxSq = rx * rx
   let rySq = ry * ry
@@ -100,7 +85,7 @@ function arcToCubics(
   const sign = largeArc === sweep ? -1 : 1
   const num = Math.max(0, rxSq * rySq - rxSq * y1pSq - rySq * x1pSq)
   const den = rxSq * y1pSq + rySq * x1pSq
-  const coef = den === 0 ? 0 : (sign * Math.sqrt(num / den))
+  const coef = den === 0 ? 0 : sign * Math.sqrt(num / den)
   const cxp = (coef * (rx * y1p)) / ry
   const cyp = (coef * -(ry * x1p)) / rx
 
@@ -299,14 +284,7 @@ function ellipsePathD(cx: number, cy: number, rx: number, ry: number): string {
   ])
 }
 
-function rectPathD(
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  rx: number,
-  ry: number,
-): string {
+function rectPathD(x: number, y: number, w: number, h: number, rx: number, ry: number): string {
   rx = Math.min(Math.abs(rx), Math.abs(w) / 2)
   ry = Math.min(Math.abs(ry), Math.abs(h) / 2)
   if (rx === 0 && ry === 0) {
@@ -602,7 +580,14 @@ export function bakeTransform(
   const withStarts = selectedPaths
     .map((path) => {
       const el = findElementByPath(content, path)
-      return el ? { path, start: el.openTagStart, tag: el.tagName.toLowerCase(), attrs: el.existingAttributes } : null
+      return el
+        ? {
+            path,
+            start: el.openTagStart,
+            tag: el.tagName.toLowerCase(),
+            attrs: el.existingAttributes,
+          }
+        : null
     })
     .filter(
       (
@@ -632,9 +617,7 @@ export function bakeTransform(
       continue
     }
 
-    let result:
-      | { content: string; converted?: boolean }
-      | { skip: BakeSkipReason }
+    let result: { content: string; converted?: boolean } | { skip: BakeSkipReason }
 
     switch (tag) {
       case 'path':

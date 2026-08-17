@@ -31,6 +31,14 @@ export function rotate(angleDeg: number): AffineMatrix {
   return { a: cos, b: sin, c: -sin, d: cos, e: 0, f: 0 }
 }
 
+/** Reflect across a line through the origin at `angleDeg` from the x axis. */
+export function mirror(angleDeg: number): AffineMatrix {
+  const rad = (2 * angleDeg * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  return { a: cos, b: sin, c: sin, d: -cos, e: 0, f: 0 }
+}
+
 /** Multiply so that `apply(multiply(A, B), p) === apply(A, apply(B, p))`. */
 export function multiply(a: AffineMatrix, b: AffineMatrix): AffineMatrix {
   return {
@@ -62,6 +70,11 @@ export function scaleAbout(sx: number, sy: number, cx: number, cy: number): Affi
 /** Rotate about a pivot: T(cx,cy) · R · T(-cx,-cy). */
 export function rotateAbout(angleDeg: number, cx: number, cy: number): AffineMatrix {
   return multiply(translate(cx, cy), multiply(rotate(angleDeg), translate(-cx, -cy)))
+}
+
+/** Reflect across the line at `angleDeg` passing through (cx, cy). */
+export function mirrorAbout(angleDeg: number, cx: number, cy: number): AffineMatrix {
+  return multiply(translate(cx, cy), multiply(mirror(angleDeg), translate(-cx, -cy)))
 }
 
 export interface TransformSessionValues {

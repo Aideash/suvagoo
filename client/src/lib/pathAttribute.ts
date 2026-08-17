@@ -699,6 +699,17 @@ export function toggleRelative(commands: PathCommand[], index: number): PathComm
   return next
 }
 
+/** Rewrite every command in absolute coordinates, leaving geometry unchanged. */
+export function commandsToAbsolute(commands: PathCommand[]): PathCommand[] {
+  let next = commands.map((c) => ({ ...c, values: [...c.values] }))
+  for (let i = 0; i < next.length; i++) {
+    if (next[i].relative) {
+      next = toggleRelative(next, i)
+    }
+  }
+  return next
+}
+
 export function insertCommand(
   commands: PathCommand[],
   index: number,
