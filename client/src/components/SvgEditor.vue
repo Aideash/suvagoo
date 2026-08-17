@@ -5,6 +5,8 @@ import { EditorView, basicSetup } from 'codemirror'
 import { xml } from '@codemirror/lang-xml'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
+import { cursorOffsetForPath, findElementAtOffset } from '../lib/svgDocument'
+import { formatSvgSource, type SvgFormatLayout } from '../lib/svgFormat'
 
 const props = defineProps<{
   modelValue: string
@@ -13,11 +15,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   cursorChange: [offset: number]
+  formatError: [message: string]
 }>()
 
 const container = ref<HTMLElement | null>(null)
 const lineWrap = ref(false)
 const showEditor = ref(true)
+/** Only lights up the button that was last used; formatting is never automatic. */
+const lastLayout = ref<SvgFormatLayout | null>(null)
 const wrapCompartment = new Compartment()
 let view: EditorView | null = null
 let applyingExternal = false
@@ -54,6 +59,29 @@ function toggleLineWrap() {
   view.dispatch({
     effects: wrapCompartment.reconfigure(lineWrap.value ? EditorView.lineWrapping : []),
   })
+}
+
+/**
+ * Re-applying the active layout is a deliberate feature: it reflows the
+ * document after hand edits without making the user switch layouts.
+ */
+function applyFormat(layout: SvgFormatLayout) {
+  if (!view) return
+
+  const current = view.state.doc.toString()
+  const formatted = formatSvgSource(current, layout)
+  if (formatted == null) {
+    emit('formatError', 'Could not format the document. Check for unclosed or mismatched tags.')
+    return
+  }
+
+  lastLayout.value = layout
+  if (formatted === current) return
+
+  const head = view.state.selection.main.head
+  const path = findElementAtOffset(current, head)?.path
+  const cursor = (path ? cursorOffsetForPath(formatted, path) : null) ?? head
+  applyChange(formatted, cursor)
 }
 
 function emitCursor() {
@@ -138,13 +166,34 @@ onBeforeUnmount(() => {
     <div class="svg-editor__toolbar">
       <button
         type="button"
-        class="svg-editor__wrap-toggle"
+        class="svg-editor__tool"
         :class="{ active: lineWrap }"
         :title="lineWrap ? 'Disable line wrap' : 'Enable line wrap'"
         @click="toggleLineWrap"
       >
         <span class="material-icons sm">wrap_text</span>
-        <span class="svg-editor__wrap-label">{{ lineWrap ? 'Wrap on' : 'Wrap off' }}</span>
+        <span class="svg-editor__tool-label">{{ lineWrap ? 'Wrap on' : 'Wrap off' }}</span>
+      </button>
+      <span class="svg-editor__divider" />
+      <button
+        type="button"
+        class="svg-editor__tool"
+        :class="{ active: lastLayout === 'pretty' }"
+        title="Format: one attribute per line, long values split"
+        @click="applyFormat('pretty')"
+      >
+        <span class="material-icons sm">unfold_more</span>
+        <span class="svg-editor__tool-label">Pretty</span>
+      </button>
+      <button
+        type="button"
+        class="svg-editor__tool"
+        :class="{ active: lastLayout === 'compact' }"
+        title="Format: one element per line"
+        @click="applyFormat('compact')"
+      >
+        <span class="material-icons sm">unfold_less</span>
+        <span class="svg-editor__tool-label">Compact</span>
       </button>
       <button
         type="button"
@@ -176,6 +225,7 @@ onBeforeUnmount(() => {
   &__toolbar {
     display: flex;
     align-items: center;
+    gap: $spacing-xs;
     flex-shrink: 0;
     padding: $spacing-xs $spacing-sm;
     border-bottom: 1px solid $color-border;
@@ -185,7 +235,13 @@ onBeforeUnmount(() => {
     }
   }
 
-  &__wrap-toggle {
+  &__divider {
+    width: 1px;
+    height: 16px;
+    background: $color-border;
+  }
+
+  &__tool {
     display: inline-flex;
     align-items: center;
     gap: $spacing-xs;
@@ -213,7 +269,7 @@ onBeforeUnmount(() => {
     }
   }
 
-  &__wrap-label {
+  &__tool-label {
     font-weight: 500;
   }
 

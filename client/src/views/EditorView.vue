@@ -332,6 +332,11 @@ function onEscapeTransform(event: KeyboardEvent) {
   onTransformCancel()
 }
 
+// Any edit that lands supersedes the last failed action's message.
+watch(content, () => {
+  builderError.value = ''
+})
+
 watch(selectedPaths, (paths) => {
   if (paths.length === 0 && !isIdentitySession(transformSession.value)) {
     transformSession.value = createIdentitySession()
@@ -501,7 +506,12 @@ function onPreviewUpdatePath(value: string) {
       <div class="editor-view__main">
         <section class="editor-view__pane editor-view__pane--code">
           <h2 class="editor-view__label">Code</h2>
-          <SvgEditor ref="editorRef" v-model="content" @cursor-change="cursorOffset = $event" />
+          <SvgEditor
+            ref="editorRef"
+            v-model="content"
+            @cursor-change="cursorOffset = $event"
+            @format-error="builderError = $event"
+          />
         </section>
         <section class="editor-view__pane editor-view__pane--preview">
           <h2 class="editor-view__label">Preview</h2>
