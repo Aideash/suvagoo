@@ -47,6 +47,23 @@ console.log(
   'dataUri has no url()-breaking chars:',
   !/[()'"<>\s]/.test(buildSvgCopy(SAMPLE, 'dataUri')!.slice('data:image/svg+xml,'.length)),
 )
+console.log(
+  'dataUri drops comments:',
+  !decodeURIComponent(buildSvgCopy(SAMPLE, 'dataUri')!.slice('data:image/svg+xml,'.length)).includes(
+    '<!--',
+  ),
+)
+console.log(
+  'single keeps comments:',
+  buildSvgCopy(SAMPLE, 'single')!.includes('<!--'),
+)
+
+const ATTR_COMMENT = `<svg xmlns="http://www.w3.org/2000/svg"><g title="<!-- keep -->"/><!-- drop --></svg>`
+const attrUri = decodeURIComponent(
+  buildSvgCopy(ATTR_COMMENT, 'dataUri')!.slice('data:image/svg+xml,'.length),
+)
+console.log('dataUri keeps comment text in attrs:', attrUri.includes('title="<!-- keep -->"'))
+console.log('dataUri drops markup comments:', !attrUri.includes('<!-- drop -->'))
 
 show('preserve single', buildSvgCopy(PRESERVE, 'single'))
 console.log('preserve keeps its newline:', buildSvgCopy(PRESERVE, 'single')!.includes('\n'))

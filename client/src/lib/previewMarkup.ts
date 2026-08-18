@@ -43,11 +43,25 @@ const EXTRA_TAGS = ['animate', 'set', 'use', 'foreignobject']
 /** Animation values absent from the profile's attribute allowlist. */
 const EXTRA_ATTRIBUTES = ['from', 'to', 'calcmode']
 
+/**
+ * DOMPurify's default data-URI allowlist covers `<image>` but not `<feImage>`,
+ * so `href="data:image/svg+xml,…"` (and other `data:` images) was stripped from
+ * filter inputs while the same value on `<image>` survived.
+ *
+ * Extending the list matches `<image>`: `javascript:` and other non-allowlisted
+ * schemes are still rejected; modern browsers decode feImage targets as images
+ * (no script execution), same as SVG-as-`<img>`. Nested SVG data URIs remain a
+ * historical XSS surface in very old browsers — acceptable here because preview
+ * markup comes from user-owned documents, not untrusted multi-tenant input.
+ */
+const EXTRA_DATA_URI_TAGS = ['feImage']
+
 export function sanitizeSvgMarkup(content: string): string {
   if (!content.trim()) return ''
   return DOMPurify.sanitize(dropNoneTransforms(content), {
     USE_PROFILES: { svg: true, svgFilters: true },
     ADD_TAGS: EXTRA_TAGS,
     ADD_ATTR: EXTRA_ATTRIBUTES,
+    ADD_DATA_URI_TAGS: EXTRA_DATA_URI_TAGS,
   })
 }

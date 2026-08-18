@@ -29,7 +29,7 @@ const COPY_OPTIONS: { format: SvgCopyFormat; name: string; hint: string }[] = [
   {
     format: 'dataUri',
     name: 'CSS data URI',
-    hint: 'Encoded for url(), data:image/svg+xml, included',
+    hint: 'Encoded for url(); comments omitted',
   },
 ]
 
@@ -241,7 +241,7 @@ onBeforeUnmount(() => {
           :label="copied ? 'Copied' : 'Copy SVG'"
           title="Copy the document to the clipboard"
           :width="300"
-          align="left"
+          align="right"
         >
           <template #default="{ close }">
             <button
