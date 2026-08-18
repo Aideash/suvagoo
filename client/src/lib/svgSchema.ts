@@ -161,6 +161,22 @@ const FILTER_PRIMITIVE_CHILDREN = [
 const FE_LIGHT_CHILDREN = ['feDistantLight', 'fePointLight', 'feSpotLight'] as const
 const FE_FUNC_CHILDREN = ['feFuncR', 'feFuncG', 'feFuncB', 'feFuncA'] as const
 
+/**
+ * Filter elements accept an animation, but only the two that write a value: a
+ * primitive is never placed in the drawing, so it has no transform to animate
+ * and no position to move along a path.
+ */
+const FILTER_ANIMATION_ELEMENTS = ['animate', 'set'] as const
+
+/** Filter elements an animation can be attached to, which is all of them. */
+const FILTER_ANIMATABLE_TAGS = [
+  'filter',
+  ...FILTER_PRIMITIVE_CHILDREN,
+  'feMergeNode',
+  ...FE_FUNC_CHILDREN,
+  ...FE_LIGHT_CHILDREN,
+] as const
+
 /** Standard geometry/result attrs on filter primitives (SVGFilterPrimitiveStandardAttributes). */
 const FE_STD_ATTRIBUTES = [
   'x',
@@ -171,7 +187,22 @@ const FE_STD_ATTRIBUTES = [
   'color-interpolation-filters',
 ] as const
 
-function feElement(
+/**
+ * A filter element takes none of the global paint attributes: it works on images
+ * inside the filter region rather than being painted, so a `fill` or `transform`
+ * written on one does nothing. What is left is identity and styling.
+ */
+const FE_GLOBAL_ATTRIBUTES = ['id', 'class', 'style'] as const
+
+/** The colour matrix that leaves every channel as it found it. */
+const IDENTITY_COLOR_MATRIX = '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0'
+
+/**
+ * A filter sub-element — transfer function, light source, merge node — which
+ * feeds the primitive around it rather than being one, so it has neither a
+ * filter subregion nor a `result` of its own.
+ */
+function feSubElement(
   tag: string,
   commonAttributes: readonly string[],
   extraAttributes: readonly string[],
@@ -180,18 +211,29 @@ function feElement(
 ): SvgElementSchema {
   return {
     tag,
-    // Every filter primitive is either a leaf or holds only elements.
+    // Every filter element is either a leaf or holds only elements.
     contentModel: children.length ? 'container' : 'empty',
     commonAttributes,
-    attributes: [
-      ...commonAttributes,
-      ...extraAttributes,
-      ...FE_STD_ATTRIBUTES,
-      ...GLOBAL_ATTRIBUTES,
-    ],
+    attributes: [...commonAttributes, ...extraAttributes, ...FE_GLOBAL_ATTRIBUTES],
     children,
     snippet,
   }
+}
+
+function feElement(
+  tag: string,
+  commonAttributes: readonly string[],
+  extraAttributes: readonly string[],
+  children: readonly string[],
+  snippet: string,
+): SvgElementSchema {
+  return feSubElement(
+    tag,
+    commonAttributes,
+    [...extraAttributes, ...FE_STD_ATTRIBUTES],
+    children,
+    snippet,
+  )
 }
 
 const SVG_ELEMENTS: SvgElementSchema[] = [
@@ -450,16 +492,18 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     tag: 'filter',
     contentModel: 'container',
     commonAttributes: ['id', 'x', 'y', 'width', 'height', 'filterUnits'],
+    // Paint attributes are left out for the same reason as on the primitives
+    // inside it: a filter is a recipe, not something drawn.
     attributes: [
-      'id',
       'x',
       'y',
       'width',
       'height',
       'filterUnits',
       'primitiveUnits',
+      'color-interpolation-filters',
       'href',
-      ...GLOBAL_ATTRIBUTES,
+      ...FE_GLOBAL_ATTRIBUTES,
     ],
     children: [...FILTER_PRIMITIVE_CHILDREN],
     snippet: `<filter id="filter-id">
@@ -617,7 +661,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     ['in', 'type', 'values', 'result'],
     [],
     [],
-    '<feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" result="colorMatrix"/>',
+    `<feColorMatrix in="SourceGraphic" type="matrix" values="${IDENTITY_COLOR_MATRIX}" result="colorMatrix"/>`,
   ),
   feElement(
     'feComponentTransfer',
@@ -695,7 +739,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   <feMergeNode in="SourceGraphic"/>
 </feMerge>`,
   ),
-  feElement('feMergeNode', ['in'], [], [], '<feMergeNode in="SourceGraphic"/>'),
+  feSubElement('feMergeNode', ['in'], [], [], '<feMergeNode in="SourceGraphic"/>'),
   feElement(
     'feMorphology',
     ['in', 'operator', 'radius', 'result'],
@@ -727,43 +771,43 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     [],
     '<feTurbulence baseFrequency="0.05" numOctaves="2" seed="0" stitchTiles="noStitch" type="fractalNoise" result="turbulence"/>',
   ),
-  feElement(
+  feSubElement(
     'feFuncR',
     ['type', 'tableValues', 'slope', 'intercept', 'amplitude', 'exponent', 'offset'],
     [],
     [],
     '<feFuncR type="identity"/>',
   ),
-  feElement(
+  feSubElement(
     'feFuncG',
     ['type', 'tableValues', 'slope', 'intercept', 'amplitude', 'exponent', 'offset'],
     [],
     [],
     '<feFuncG type="identity"/>',
   ),
-  feElement(
+  feSubElement(
     'feFuncB',
     ['type', 'tableValues', 'slope', 'intercept', 'amplitude', 'exponent', 'offset'],
     [],
     [],
     '<feFuncB type="identity"/>',
   ),
-  feElement(
+  feSubElement(
     'feFuncA',
     ['type', 'tableValues', 'slope', 'intercept', 'amplitude', 'exponent', 'offset'],
     [],
     [],
     '<feFuncA type="identity"/>',
   ),
-  feElement(
+  feSubElement(
     'feDistantLight',
     ['azimuth', 'elevation'],
     [],
     [],
     '<feDistantLight azimuth="45" elevation="45"/>',
   ),
-  feElement('fePointLight', ['x', 'y', 'z'], [], [], '<fePointLight x="50" y="50" z="200"/>'),
-  feElement(
+  feSubElement('fePointLight', ['x', 'y', 'z'], [], [], '<fePointLight x="50" y="50" z="200"/>'),
+  feSubElement(
     'feSpotLight',
     ['x', 'y', 'z', 'pointsAtX', 'pointsAtY', 'pointsAtZ', 'specularExponent', 'limitingConeAngle'],
     [],
@@ -785,10 +829,17 @@ export function isAnimationTag(tag: string): boolean {
 }
 
 const ANIMATABLE_TAG_SET = new Set(ANIMATABLE_TAGS.map(normalizeTagName))
+const FILTER_ANIMATABLE_TAG_SET = new Set(FILTER_ANIMATABLE_TAGS.map(normalizeTagName))
 
 function withAnimationChildren(schema: SvgElementSchema): SvgElementSchema {
-  if (!ANIMATABLE_TAG_SET.has(normalizeTagName(schema.tag))) return schema
-  return { ...schema, children: [...schema.children, ...ANIMATION_ELEMENTS] }
+  const tag = normalizeTagName(schema.tag)
+  if (ANIMATABLE_TAG_SET.has(tag)) {
+    return { ...schema, children: [...schema.children, ...ANIMATION_ELEMENTS] }
+  }
+  if (FILTER_ANIMATABLE_TAG_SET.has(tag)) {
+    return { ...schema, children: [...schema.children, ...FILTER_ANIMATION_ELEMENTS] }
+  }
+  return schema
 }
 
 const schemaByTag = new Map(
@@ -868,7 +919,7 @@ const DEFAULT_ATTR_VALUES: Record<string, string> = {
   specularConstant: '1',
   specularExponent: '20',
   preserveAspectRatio: 'xMidYMid meet',
-  values: '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0',
+  values: IDENTITY_COLOR_MATRIX,
   order: '3',
   kernelMatrix: '0 0 0  0 1 0  0 0 0',
   radius: '2',
@@ -1029,11 +1080,121 @@ const ANIMATION_ATTR_DEFAULTS: Record<string, string> = {
   type: 'rotate',
 }
 
+/** A colour matrix that drains the artwork of colour, leaving alpha alone. */
+const GRAYSCALE_COLOR_MATRIX =
+  '0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 1 0'
+
+/**
+ * An endpoint of a filter animation: a literal value, a multiple of the smaller
+ * document dimension for the ones that measure a distance, or the value another
+ * attribute would take here, borrowed for its coordinate space.
+ */
+type FilterEndpoint = string | { span: number } | { like: string }
+
+interface FilterAnimation {
+  attributeName: string
+  from: FilterEndpoint
+  to: FilterEndpoint
+}
+
+/**
+ * The parameter an animation attached to a filter element drives, and the pair
+ * of values it moves between. Without this an animation dropped into a filter
+ * would offer `opacity`, which no filter element has; which parameter is worth
+ * animating is particular to each primitive.
+ *
+ * Elements with nothing of their own to interpolate — a merge, a tile, a
+ * component transfer, the filter itself — animate the subregion they draw into,
+ * which is the only value they own.
+ */
+const FILTER_ANIMATIONS: Record<string, FilterAnimation> = {
+  filter: { attributeName: 'width', from: '120%', to: '200%' },
+  feBlend: { attributeName: 'mode', from: 'normal', to: 'screen' },
+  feColorMatrix: {
+    attributeName: 'values',
+    from: IDENTITY_COLOR_MATRIX,
+    to: GRAYSCALE_COLOR_MATRIX,
+  },
+  feComponentTransfer: { attributeName: 'width', from: '120%', to: '200%' },
+  feComposite: { attributeName: 'operator', from: 'over', to: 'xor' },
+  feConvolveMatrix: { attributeName: 'divisor', from: '1', to: '4' },
+  feDiffuseLighting: { attributeName: 'diffuseConstant', from: '0', to: '2' },
+  feDisplacementMap: { attributeName: 'scale', from: '0', to: { span: 0.3 } },
+  feDropShadow: { attributeName: 'stdDeviation', from: '0', to: { span: 0.06 } },
+  feFlood: { attributeName: 'flood-color', from: '#3b82f6', to: '#ef4444' },
+  feGaussianBlur: { attributeName: 'stdDeviation', from: '0', to: { span: 0.08 } },
+  feImage: { attributeName: 'width', from: '120%', to: '200%' },
+  feMerge: { attributeName: 'width', from: '120%', to: '200%' },
+  feMergeNode: { attributeName: 'in', from: 'SourceGraphic', to: 'SourceAlpha' },
+  feMorphology: { attributeName: 'radius', from: '0', to: { span: 0.04 } },
+  feOffset: { attributeName: 'dx', from: '0', to: { like: 'dx' } },
+  feSpecularLighting: { attributeName: 'specularExponent', from: '1', to: '40' },
+  feTile: { attributeName: 'width', from: '120%', to: '200%' },
+  feTurbulence: { attributeName: 'baseFrequency', from: '0.01', to: '0.08' },
+  feFuncR: { attributeName: 'slope', from: '1', to: '2' },
+  feFuncG: { attributeName: 'slope', from: '1', to: '2' },
+  feFuncB: { attributeName: 'slope', from: '1', to: '2' },
+  feFuncA: { attributeName: 'slope', from: '1', to: '2' },
+  feDistantLight: { attributeName: 'azimuth', from: '0', to: '360' },
+  // A light that crosses the artwork rather than sitting still over it.
+  fePointLight: { attributeName: 'x', from: { like: 'x1' }, to: { like: 'x2' } },
+  feSpotLight: { attributeName: 'x', from: { like: 'x1' }, to: { like: 'x2' } },
+}
+
+const filterAnimationByTag = new Map(
+  Object.entries(FILTER_ANIMATIONS).map(([tag, animation]) => [normalizeTagName(tag), animation]),
+)
+
+function resolveFilterEndpoint(
+  endpoint: FilterEndpoint,
+  viewBox: ViewBox,
+  parentTag: string,
+): string {
+  if (typeof endpoint === 'string') return endpoint
+  if ('span' in endpoint) {
+    return formatNumber(Math.min(viewBox.width, viewBox.height) * endpoint.span)
+  }
+  return viewBoxValueForAttribute(endpoint.like, viewBox, parentTag) ?? ''
+}
+
+/**
+ * Values an animation takes from the filter element it is attached to. Null when
+ * the parent is not a filter element, or when the attribute is not one whose
+ * value the target decides.
+ */
+function filterAnimationValue(name: string, viewBox: ViewBox, parentTag: string): string | null {
+  const animation = filterAnimationByTag.get(normalizeTagName(parentTag))
+  if (!animation) return null
+
+  const from = () => resolveFilterEndpoint(animation.from, viewBox, parentTag)
+  const to = () => resolveFilterEndpoint(animation.to, viewBox, parentTag)
+
+  switch (name) {
+    case 'attributeName':
+      return animation.attributeName
+    case 'from':
+      return from()
+    case 'to':
+      return to()
+    case 'values':
+      return `${from()};${to()}`
+    default:
+      return null
+  }
+}
+
 /**
  * Animation attributes that read better when sized to the document: a rotation
- * needs a centre, and a motion path needs somewhere to go.
+ * needs a centre, and a motion path needs somewhere to go. `parentTag` names the
+ * element being animated, which is what decides the values where the animation
+ * element itself does not.
  */
-function animationValueForAttribute(name: string, viewBox: ViewBox, tag: string): string | null {
+function animationValueForAttribute(
+  name: string,
+  viewBox: ViewBox,
+  tag: string,
+  parentTag?: string,
+): string | null {
   const { minX, minY, width, height } = viewBox
   const midX = formatNumber(minX + width / 2)
   const midY = formatNumber(minY + height / 2)
@@ -1050,6 +1211,11 @@ function animationValueForAttribute(name: string, viewBox: ViewBox, tag: string)
     return `M ${startX} ${midY} L ${endX} ${midY}`
   }
 
+  if (parentTag) {
+    const filtered = filterAnimationValue(name, viewBox, parentTag)
+    if (filtered != null) return filtered
+  }
+
   return null
 }
 
@@ -1057,11 +1223,12 @@ export function defaultAttributeValue(
   name: string,
   viewBox: ViewBox = DEFAULT_VIEWBOX,
   tag?: string,
+  parentTag?: string,
 ): string {
   // Checked ahead of the shared table because several names mean something
   // different here: `fill` is freeze/remove, `values` is a keyframe list.
   if (tag && isAnimationTag(tag)) {
-    const animated = animationValueForAttribute(name, viewBox, tag)
+    const animated = animationValueForAttribute(name, viewBox, tag, parentTag)
     if (animated != null) return animated
     const fallback = ANIMATION_ATTR_DEFAULTS[name]
     if (fallback != null) return fallback
@@ -1080,8 +1247,12 @@ const ATTRIBUTE = /([A-Za-z][\w:.-]*)(\s*=\s*)(["'])([^"']*)\3/g
  * snippet is handled against its own schema, so nested example children land in
  * the same coordinate space as the element they sit in. Values that carry no
  * geometry (ids, colours, enumerations) are left as authored.
+ *
+ * `parentTag` is the element the snippet is being inserted into. It reaches only
+ * the animation elements, which is where it is needed and where it holds: no
+ * snippet nests one, so an animation tag here is always the snippet's own root.
  */
-function applyViewBoxToSnippet(snippet: string, viewBox: ViewBox): string {
+function applyViewBoxToSnippet(snippet: string, viewBox: ViewBox, parentTag?: string): string {
   return snippet.replace(OPEN_TAG, (tag, tagName: string, attrs: string, selfClosing: string) => {
     const schema = getElementSchema(tagName)
     if (!schema) return tag
@@ -1090,7 +1261,7 @@ function applyViewBoxToSnippet(snippet: string, viewBox: ViewBox): string {
     const scaled = attrs.replace(ATTRIBUTE, (attr, name: string, eq, quote) => {
       if (!known.has(name)) return attr
       const scaledValue = isAnimationTag(tagName)
-        ? animationValueForAttribute(name, viewBox, tagName)
+        ? animationValueForAttribute(name, viewBox, tagName, parentTag)
         : viewBoxValueForAttribute(name, viewBox, tagName)
       return scaledValue == null ? attr : `${name}${eq}${quote}${scaledValue}${quote}`
     })
@@ -1106,11 +1277,12 @@ export function getSnippetForTag(
   tagName: string,
   viewBox: ViewBox = DEFAULT_VIEWBOX,
   mode: SnippetMode = DEFAULT_SNIPPET_MODE,
+  parentTag?: string,
 ): string {
   const schema = getElementSchema(tagName)
   if (!schema) return bareTag(tagName.trim(), 'empty')
   if (mode === 'tag-only') return bareTag(schema.tag, schema.contentModel)
-  return applyViewBoxToSnippet(schema.snippet, viewBox)
+  return applyViewBoxToSnippet(schema.snippet, viewBox, parentTag)
 }
 
 export function uniqueSorted(values: readonly string[]): string[] {

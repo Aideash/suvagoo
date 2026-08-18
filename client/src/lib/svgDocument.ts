@@ -616,12 +616,24 @@ export function insertAttribute(
     }
   }
 
-  const value = defaultAttributeValue(attrName, viewBox, context.tagName)
+  // An animation element takes its values from the element it is attached to, so
+  // the parent is named alongside the element the attribute lands on.
+  const value = defaultAttributeValue(attrName, viewBox, context.tagName, context.path.at(-2)?.tag)
   const insertion = ` ${attrName}="${value}"`
   const insertAt = context.openTagEnd - (openTag.endsWith('/>') ? 2 : 1)
   const next = content.slice(0, insertAt) + insertion + content.slice(insertAt)
   const cursor = insertAt + insertion.indexOf('"') + 1
   return { content: next, cursor }
+}
+
+/**
+ * The element's name as the document spells it, which is what a close tag has to
+ * repeat: XML is case-sensitive, and the parsed name is lowercased with any
+ * namespace prefix removed, so `<feGaussianBlur/>` would otherwise be closed as
+ * `</fegaussianblur>`.
+ */
+function authoredTagName(openTag: string): string | null {
+  return /^<\s*([A-Za-z_][\w:.-]*)/.exec(openTag)?.[1] ?? null
 }
 
 /**
@@ -658,7 +670,7 @@ export function insertChildElement(
     return null
   }
 
-  const snippet = getSnippetForTag(childTag, viewBox, snippetMode)
+  const snippet = getSnippetForTag(childTag, viewBox, snippetMode, context.tagName)
   const parentIndent = lineIndentAt(content, context.openTagStart)
   const childIndent = `${parentIndent}  `
   const formatted = snippet
@@ -668,7 +680,7 @@ export function insertChildElement(
 
   const openTag = content.slice(context.openTagStart, context.openTagEnd)
   if (openTag.endsWith('/>')) {
-    const tagName = context.tagName
+    const tagName = authoredTagName(openTag) ?? context.tagName
     const replacementOpen = openTag.replace(/\/>$/, '>')
     const block = `${replacementOpen}\n${formatted}\n${parentIndent}</${tagName}>`
     const next = content.slice(0, context.openTagStart) + block + content.slice(context.openTagEnd)

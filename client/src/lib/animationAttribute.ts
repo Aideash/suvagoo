@@ -15,10 +15,11 @@ const ANIMATED_VALUE_ATTRS = new Set(['from', 'to', 'by'])
 
 /**
  * Structural attributes with nothing to interpolate. `xmlns` and `id` change
- * identity rather than appearance, and `class`/`style` are indirections that a
- * SMIL animation cannot address.
+ * identity rather than appearance, `class`/`style` are indirections that a SMIL
+ * animation cannot address, and `result` names a filter primitive's output for
+ * later primitives to read, which the spec declares un-animatable.
  */
-const NON_ANIMATABLE_ATTRS = new Set(['id', 'class', 'style', 'xmlns', 'href'])
+const NON_ANIMATABLE_ATTRS = new Set(['id', 'class', 'style', 'xmlns', 'href', 'result'])
 
 /** The only attributes `animateTransform` can target. */
 const TRANSFORM_ATTRS = ['transform', 'gradientTransform', 'patternTransform']
