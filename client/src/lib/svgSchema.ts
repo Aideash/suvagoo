@@ -85,6 +85,59 @@ const DEFS_CHILDREN = [
 
 const GRADIENT_CHILDREN = ['stop'] as const
 
+/** SMIL elements, which attach to whatever element they animate. */
+export const ANIMATION_ELEMENTS = ['animate', 'set', 'animateTransform', 'animateMotion'] as const
+
+/**
+ * Elements an animation element can be attached to. Kept apart from each
+ * schema's `children` so the structural children stay readable, and joined in
+ * when the lookup map is built.
+ */
+const ANIMATABLE_TAGS = [
+  'svg',
+  'g',
+  'rect',
+  'circle',
+  'ellipse',
+  'line',
+  'polyline',
+  'polygon',
+  'path',
+  'text',
+  'tspan',
+  'textPath',
+  'use',
+  'image',
+  'symbol',
+  'linearGradient',
+  'radialGradient',
+  'stop',
+  'clipPath',
+  'mask',
+  'pattern',
+  'marker',
+] as const
+
+/** Timing attributes every animation element shares. */
+const ANIMATION_TIMING_ATTRIBUTES = [
+  'dur',
+  'begin',
+  'end',
+  'repeatCount',
+  'repeatDur',
+  'restart',
+  'fill',
+] as const
+
+/** Interpolation attributes shared by everything except `set`. */
+const ANIMATION_VALUE_ATTRIBUTES = [
+  'calcMode',
+  'keyTimes',
+  'keySplines',
+  'additive',
+  'accumulate',
+] as const
+
 const FILTER_PRIMITIVE_CHILDREN = [
   'feBlend',
   'feColorMatrix',
@@ -480,6 +533,78 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
   <div xmlns="http://www.w3.org/1999/xhtml">Text</div>
 </foreignObject>`,
   },
+  {
+    tag: 'animate',
+    contentModel: 'empty',
+    // No global attributes: `fill` here means freeze/remove, and paint has no
+    // meaning on a timing element.
+    commonAttributes: ['attributeName', 'from', 'to', 'dur', 'begin', 'repeatCount', 'fill'],
+    attributes: [
+      'attributeName',
+      'from',
+      'to',
+      'by',
+      'values',
+      ...ANIMATION_TIMING_ATTRIBUTES,
+      ...ANIMATION_VALUE_ATTRIBUTES,
+      'id',
+    ],
+    children: [],
+    snippet: '<animate attributeName="opacity" from="1" to="0" dur="1s" repeatCount="indefinite"/>',
+  },
+  {
+    tag: 'set',
+    contentModel: 'empty',
+    // A step change rather than an interpolation, so no from/by/calcMode.
+    commonAttributes: ['attributeName', 'to', 'begin', 'dur', 'fill'],
+    attributes: ['attributeName', 'to', ...ANIMATION_TIMING_ATTRIBUTES, 'id'],
+    children: [],
+    snippet: '<set attributeName="fill" to="#ef4444" begin="1s" fill="freeze"/>',
+  },
+  {
+    tag: 'animateTransform',
+    contentModel: 'empty',
+    commonAttributes: ['attributeName', 'type', 'from', 'to', 'dur', 'repeatCount'],
+    attributes: [
+      'attributeName',
+      'type',
+      'from',
+      'to',
+      'by',
+      'values',
+      ...ANIMATION_TIMING_ATTRIBUTES,
+      ...ANIMATION_VALUE_ATTRIBUTES,
+      'id',
+    ],
+    children: [],
+    // The rotation centre in from/to is rewritten to the document's midpoint
+    // when the snippet is inserted.
+    snippet:
+      '<animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="2s" repeatCount="indefinite"/>',
+  },
+  {
+    tag: 'animateMotion',
+    contentModel: 'container',
+    commonAttributes: ['path', 'dur', 'begin', 'repeatCount', 'rotate', 'fill'],
+    attributes: [
+      'path',
+      'rotate',
+      'keyPoints',
+      ...ANIMATION_TIMING_ATTRIBUTES,
+      ...ANIMATION_VALUE_ATTRIBUTES,
+      'id',
+    ],
+    children: ['mpath'],
+    snippet: '<animateMotion dur="3s" repeatCount="indefinite" path="M 0 0 L 40 0"/>',
+  },
+  {
+    tag: 'mpath',
+    contentModel: 'empty',
+    commonAttributes: ['href'],
+    attributes: ['href', 'id'],
+    children: [],
+    snippet: '<mpath href="#path-id"/>',
+  },
   feElement(
     'feBlend',
     ['mode', 'in', 'in2', 'result'],
@@ -653,7 +778,22 @@ export function normalizeTagName(raw: string): string {
   return colon >= 0 ? trimmed.slice(colon + 1) : trimmed
 }
 
-const schemaByTag = new Map(SVG_ELEMENTS.map((entry) => [normalizeTagName(entry.tag), entry]))
+const ANIMATION_TAG_SET = new Set(ANIMATION_ELEMENTS.map(normalizeTagName))
+
+export function isAnimationTag(tag: string): boolean {
+  return ANIMATION_TAG_SET.has(normalizeTagName(tag))
+}
+
+const ANIMATABLE_TAG_SET = new Set(ANIMATABLE_TAGS.map(normalizeTagName))
+
+function withAnimationChildren(schema: SvgElementSchema): SvgElementSchema {
+  if (!ANIMATABLE_TAG_SET.has(normalizeTagName(schema.tag))) return schema
+  return { ...schema, children: [...schema.children, ...ANIMATION_ELEMENTS] }
+}
+
+const schemaByTag = new Map(
+  SVG_ELEMENTS.map((entry) => [normalizeTagName(entry.tag), withAnimationChildren(entry)]),
+)
 
 const VIEWBOX_NUMERIC_ATTRS = new Set([
   'x',
@@ -865,11 +1005,68 @@ export function parseViewBoxFromContent(content: string): ViewBox {
   return DEFAULT_VIEWBOX
 }
 
+const ANIMATION_ATTR_DEFAULTS: Record<string, string> = {
+  attributeName: 'opacity',
+  from: '1',
+  to: '0',
+  by: '1',
+  values: '1;0',
+  dur: '1s',
+  begin: '0s',
+  end: '2s',
+  repeatCount: 'indefinite',
+  repeatDur: 'indefinite',
+  // On a timing element `fill` decides what happens after the run, not paint.
+  fill: 'freeze',
+  restart: 'always',
+  calcMode: 'linear',
+  keyTimes: '0;1',
+  keySplines: '0.4 0 0.2 1',
+  keyPoints: '0;1',
+  additive: 'replace',
+  accumulate: 'none',
+  rotate: 'auto',
+  type: 'rotate',
+}
+
+/**
+ * Animation attributes that read better when sized to the document: a rotation
+ * needs a centre, and a motion path needs somewhere to go.
+ */
+function animationValueForAttribute(name: string, viewBox: ViewBox, tag: string): string | null {
+  const { minX, minY, width, height } = viewBox
+  const midX = formatNumber(minX + width / 2)
+  const midY = formatNumber(minY + height / 2)
+
+  if (normalizeTagName(tag) === 'animatetransform') {
+    if (name === 'from') return `0 ${midX} ${midY}`
+    if (name === 'to') return `360 ${midX} ${midY}`
+    if (name === 'attributeName') return 'transform'
+  }
+
+  if (normalizeTagName(tag) === 'animatemotion' && name === 'path') {
+    const startX = formatNumber(minX + width * 0.1)
+    const endX = formatNumber(minX + width * 0.9)
+    return `M ${startX} ${midY} L ${endX} ${midY}`
+  }
+
+  return null
+}
+
 export function defaultAttributeValue(
   name: string,
   viewBox: ViewBox = DEFAULT_VIEWBOX,
   tag?: string,
 ): string {
+  // Checked ahead of the shared table because several names mean something
+  // different here: `fill` is freeze/remove, `values` is a keyframe list.
+  if (tag && isAnimationTag(tag)) {
+    const animated = animationValueForAttribute(name, viewBox, tag)
+    if (animated != null) return animated
+    const fallback = ANIMATION_ATTR_DEFAULTS[name]
+    if (fallback != null) return fallback
+  }
+
   const viewBoxValue = viewBoxValueForAttribute(name, viewBox, tag)
   if (viewBoxValue != null) return viewBoxValue
   return DEFAULT_ATTR_VALUES[name] ?? '...'
@@ -892,7 +1089,9 @@ function applyViewBoxToSnippet(snippet: string, viewBox: ViewBox): string {
     const known = new Set([...schema.commonAttributes, ...schema.attributes])
     const scaled = attrs.replace(ATTRIBUTE, (attr, name: string, eq, quote) => {
       if (!known.has(name)) return attr
-      const scaledValue = viewBoxValueForAttribute(name, viewBox, tagName)
+      const scaledValue = isAnimationTag(tagName)
+        ? animationValueForAttribute(name, viewBox, tagName)
+        : viewBoxValueForAttribute(name, viewBox, tagName)
       return scaledValue == null ? attr : `${name}${eq}${quote}${scaledValue}${quote}`
     })
     return `<${tagName}${scaled}${selfClosing}>`

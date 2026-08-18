@@ -23,9 +23,31 @@ function dropNoneTransforms(content: string): string {
   })
 }
 
+/**
+ * Elements the SVG profile withholds but the editor offers, so a document that
+ * uses them has to render:
+ *
+ * - `animate` and `set`, because animation is the usual vehicle for turning a
+ *   static `href` into a script URL. DOMPurify's separate guard on
+ *   `attributeName` values naming `href` stays in force, which is the part of
+ *   that protection that matters for markup authored here.
+ * - `use`, whose `href` is still validated against the URI allowlist, so a
+ *   `javascript:` target loses the attribute.
+ * - `foreignObject`. Its HTML children are dropped all the same: DOMPurify only
+ *   treats `annotation-xml` as an HTML integration point, and adding
+ *   `foreignobject` to that set is what reopens SVG-to-HTML namespace
+ *   confusion. The box renders with its text content.
+ */
+const EXTRA_TAGS = ['animate', 'set', 'use', 'foreignobject']
+
+/** Animation values absent from the profile's attribute allowlist. */
+const EXTRA_ATTRIBUTES = ['from', 'to', 'calcmode']
+
 export function sanitizeSvgMarkup(content: string): string {
   if (!content.trim()) return ''
   return DOMPurify.sanitize(dropNoneTransforms(content), {
     USE_PROFILES: { svg: true, svgFilters: true },
+    ADD_TAGS: EXTRA_TAGS,
+    ADD_ATTR: EXTRA_ATTRIBUTES,
   })
 }

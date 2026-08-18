@@ -88,7 +88,7 @@ function commitText(name: string, input: HTMLInputElement) {
     return
   }
 
-  const acceptsUnits = unitsForAttribute(name).length > 1
+  const acceptsUnits = unitsForAttribute(name, props.context.tagName).length > 1
   const unit = parsed.unit.trim() && acceptsUnits ? parsed.unit.trim() : row.parsed.unit
   const value = formatNumericValue(parsed.number, unit)
   if (value === row.value) {

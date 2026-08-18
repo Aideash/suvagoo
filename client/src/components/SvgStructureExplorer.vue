@@ -4,6 +4,7 @@ import {
   EXPLORER_COMMON_LIMIT,
   formatPathSegment,
   getElementSchema,
+  isAnimationTag,
   uniqueSorted,
 } from '../lib/svgSchema'
 import {
@@ -127,19 +128,31 @@ function matchesNeedle(label: string): boolean {
   return label.toLowerCase().includes(needle.value)
 }
 
+/**
+ * Animation elements are offered by almost every schema, and they sort ahead of
+ * the structural children, so they get their own row rather than filling the
+ * common slots on every container.
+ */
+const structuralChildren = computed(() =>
+  uniqueSorted((schema.value?.children ?? []).filter((tag) => !isAnimationTag(tag))),
+)
+
 const visibleInsertChildren = computed(() => {
-  const children = schema.value?.children ?? []
-  const filtered = children.filter((tag) => matchesNeedle(tag))
-  const sorted = uniqueSorted(filtered)
-  if (needle.value || showAllChildren.value) return sorted
-  return sorted.slice(0, EXPLORER_COMMON_LIMIT)
+  const filtered = structuralChildren.value.filter((tag) => matchesNeedle(tag))
+  if (needle.value || showAllChildren.value) return filtered
+  return filtered.slice(0, EXPLORER_COMMON_LIMIT)
 })
 
 const hiddenInsertChildCount = computed(() => {
   if (deleteMode.value || needle.value || showAllChildren.value) return 0
-  const total = uniqueSorted(schema.value?.children ?? []).length
-  return Math.max(0, total - EXPLORER_COMMON_LIMIT)
+  return Math.max(0, structuralChildren.value.length - EXPLORER_COMMON_LIMIT)
 })
+
+const animationChildren = computed(() =>
+  uniqueSorted(
+    (schema.value?.children ?? []).filter((tag) => isAnimationTag(tag) && matchesNeedle(tag)),
+  ),
+)
 
 const commonAttributes = computed(() => {
   const attrs = schema.value?.commonAttributes ?? []
@@ -510,7 +523,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
               </button>
             </div>
           </div>
-          <div class="svg-explorer__chips">
+          <div v-if="visibleInsertChildren.length" class="svg-explorer__chips">
             <button
               v-for="tag in visibleInsertChildren"
               :key="tag"
@@ -530,6 +543,22 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
           >
             Show {{ hiddenInsertChildCount }} more…
           </button>
+
+          <template v-if="animationChildren.length">
+            <h4 class="svg-explorer__subheading">Animation</h4>
+            <div class="svg-explorer__chips">
+              <button
+                v-for="tag in animationChildren"
+                :key="tag"
+                type="button"
+                class="svg-explorer__chip"
+                :title="`Insert ${tag}`"
+                @click="emit('insertChild', tag)"
+              >
+                {{ tag }}
+              </button>
+            </div>
+          </template>
         </section>
 
         <section v-if="schema" class="svg-explorer__section">
@@ -767,6 +796,15 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: $color-text-muted;
+  }
+
+  &__subheading {
+    margin: $spacing-sm 0 $spacing-xs;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-faint);
   }
 
   &__target {

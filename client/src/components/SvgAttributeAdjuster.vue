@@ -13,8 +13,12 @@ import {
   findDocumentIdConflict,
   suggestIdReferences,
 } from '../lib/idReferences'
+import { resolveAnimatedValueTarget } from '../lib/animationAttribute'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
 import AxisControl from './AxisControl.vue'
+import AnimationTargetAdjuster from './AnimationTargetAdjuster.vue'
+import DurationAdjuster from './DurationAdjuster.vue'
+import RepeatCountAdjuster from './RepeatCountAdjuster.vue'
 import ColorAttributeAdjuster from './ColorAttributeAdjuster.vue'
 import PointsAttributeAdjuster from './PointsAttributeAdjuster.vue'
 import PathAttributeAdjuster from './PathAttributeAdjuster.vue'
@@ -50,13 +54,32 @@ const caret = ref(props.attribute.value.length)
 const textInput = ref<{ setCaret: (offset: number) => void }>()
 const idWarnId = useId()
 
-const schema = computed(() => getAttributeSchema(props.attribute.attrName, props.attribute.tagName))
+/**
+ * On an animation element, `from`/`to`/`by` hold values of whatever attribute
+ * the animation targets, so they are edited with that attribute's control.
+ */
+const animatedValue = computed(() => resolveAnimatedValueTarget(props.content, props.attribute))
+
+const schema = computed(
+  () =>
+    animatedValue.value?.schema ??
+    getAttributeSchema(props.attribute.attrName, props.attribute.tagName),
+)
+
+/** The attribute whose type is on screen, which is not always the one at the cursor. */
+const typedAttrName = computed(() => animatedValue.value?.attrName ?? props.attribute.attrName)
+const typedTagName = computed(() => animatedValue.value?.targetTag ?? props.attribute.tagName)
+
 /**
  * Ranges follow the coordinate space the attribute is actually measured in, so
  * geometry inside a marker or symbol is scaled to that resource, not the page.
  */
 const viewBox = computed(() =>
-  viewBoxForAttribute(props.content, props.attribute.path, props.attribute.attrName),
+  viewBoxForAttribute(
+    props.content,
+    animatedValue.value?.targetPath ?? props.attribute.path,
+    typedAttrName.value,
+  ),
 )
 
 /** Parsed once here and shared with the adjusters that offer `url(#…)` completion. */
@@ -82,7 +105,7 @@ const isLengthKind = computed(
 )
 
 const defaultNumericRange = computed(() =>
-  numericRangeForAttribute(props.attribute.attrName, viewBox.value, props.attribute.value),
+  numericRangeForAttribute(typedAttrName.value, viewBox.value, props.attribute.value),
 )
 
 /**
@@ -93,7 +116,7 @@ const defaultNumericRange = computed(() =>
 const axisDefaults = ref({ min: 0, max: 100, step: 1 })
 
 function syncAxisDefaults(value: string) {
-  axisDefaults.value = numericRangeForAttribute(props.attribute.attrName, viewBox.value, value)
+  axisDefaults.value = numericRangeForAttribute(typedAttrName.value, viewBox.value, value)
 }
 
 watch(
@@ -123,7 +146,7 @@ const effectiveRange = computed(() => {
 
 const parsedNumeric = computed(() => parseNumericValue(props.attribute.value))
 const lengthUnit = computed(() => parsedNumeric.value?.unit ?? '')
-const lengthUnits = computed(() => unitsForAttribute(props.attribute.attrName))
+const lengthUnits = computed(() => unitsForAttribute(typedAttrName.value, typedTagName.value))
 
 /** Falls through to the raw text input while the value is not a plain number. */
 const showAxisControl = computed(() => isLengthKind.value && parsedNumeric.value != null)
@@ -217,9 +240,32 @@ function setEnumValue(value: string) {
       <code>{{ attribute.attrName }}</code>
       <span class="attr-adjuster__value-preview">{{ attribute.value }}</span>
     </p>
+    <p v-if="animatedValue" class="attr-adjuster__custom">
+      Typed as <code>{{ animatedValue.attrName }}</code> on
+      <code>&lt;{{ animatedValue.targetTag }}&gt;</code>
+    </p>
+
+    <AnimationTargetAdjuster
+      v-if="schema.kind === 'attribute-name'"
+      :attribute="attribute"
+      :content="content"
+      @update="commit"
+    />
+
+    <DurationAdjuster
+      v-else-if="schema.kind === 'duration'"
+      :attribute="attribute"
+      @update="commit"
+    />
+
+    <RepeatCountAdjuster
+      v-else-if="schema.kind === 'repeat-count'"
+      :attribute="attribute"
+      @update="commit"
+    />
 
     <ColorAttributeAdjuster
-      v-if="schema.kind === 'color'"
+      v-else-if="schema.kind === 'color'"
       :attribute="attribute"
       :document-ids="documentIds"
       @update="commit"
@@ -389,6 +435,7 @@ function setEnumValue(value: string) {
       :default-min="axisDefaults.min"
       :default-max="axisDefaults.max"
       :default-step="axisDefaults.step"
+      :fixed-min="schema.fixedMin"
       @update="onLengthUpdate"
     />
 

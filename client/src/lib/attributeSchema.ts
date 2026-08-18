@@ -1,5 +1,5 @@
 import { COLOR_MATRIX_TYPES } from './colorMatrixAttribute'
-import { getElementSchema, type ViewBox } from './svgSchema'
+import { getElementSchema, isAnimationTag, normalizeTagName, type ViewBox } from './svgSchema'
 
 export type AttributeKind =
   | 'color'
@@ -19,6 +19,9 @@ export type AttributeKind =
   | 'preserveAspectRatio'
   | 'orient'
   | 'stroke-dasharray'
+  | 'duration'
+  | 'repeat-count'
+  | 'attribute-name'
   | 'text'
 
 export interface DualNumberLabels {
@@ -35,6 +38,8 @@ export interface AttributeSchema {
   dualNumber?: DualNumberLabels
   /** Units the value may carry; '' is the unitless (user space) option. */
   units?: readonly string[]
+  /** Lower bound the value cannot be dragged or typed below. */
+  fixedMin?: number
 }
 
 const UNITLESS: readonly string[] = ['']
@@ -223,6 +228,62 @@ const ENUM_ATTRS: Record<string, readonly string[]> = {
   spacing: ['auto', 'exact'],
 }
 
+const TIME_UNITS: readonly string[] = ['s', 'ms']
+
+/** Clock-valued attributes on the SMIL elements. */
+const ANIMATION_TIME_ATTRS = new Set(['dur', 'begin', 'end', 'repeatdur'])
+
+/**
+ * Enumerations that only apply to animation elements. `fill` is here because it
+ * names the post-run behaviour rather than a paint.
+ */
+const ANIMATION_ENUMS: Record<string, readonly string[]> = {
+  fill: ['freeze', 'remove'],
+  calcMode: ['discrete', 'linear', 'paced', 'spline'],
+  restart: ['always', 'whenNotActive', 'never'],
+  additive: ['replace', 'sum'],
+  accumulate: ['none', 'sum'],
+}
+
+const TRANSFORM_ANIMATION_TYPES: readonly string[] = [
+  'translate',
+  'scale',
+  'rotate',
+  'skewX',
+  'skewY',
+]
+
+export const REPEAT_COUNT_RANGE = { min: 0, max: 20, step: 1 }
+
+/** Slider bounds for a clock value, sized to the unit it is written in. */
+export function durationRangeForUnit(unit: string): { min: number; max: number; step: number } {
+  if (unit === 'ms') return { min: 0, max: 5000, step: 50 }
+  return { min: 0, max: 10, step: 0.1 }
+}
+
+function animationSchemaFor(name: string, tag: string): AttributeSchema | null {
+  const normalized = name.toLowerCase()
+
+  if (normalized === 'attributename') return { kind: 'attribute-name' }
+  if (normalized === 'repeatcount') return { kind: 'repeat-count' }
+  if (ANIMATION_TIME_ATTRS.has(normalized)) {
+    return { kind: 'duration', units: TIME_UNITS, step: 0.1, fixedMin: 0 }
+  }
+  if (normalized === 'type' && tag === 'animatetransform') {
+    return { kind: 'enum', enumValues: TRANSFORM_ANIMATION_TYPES }
+  }
+  if (normalized === 'path' && tag === 'animatemotion') {
+    return { kind: 'path' }
+  }
+
+  const enumKey = Object.keys(ANIMATION_ENUMS).find(
+    (candidate) => candidate.toLowerCase() === normalized,
+  )
+  if (enumKey) return { kind: 'enum', enumValues: ANIMATION_ENUMS[enumKey] }
+
+  return null
+}
+
 const TURBULENCE_TYPES: readonly string[] = ['fractalNoise', 'turbulence']
 
 const TRANSFER_FUNCTION_TYPES: readonly string[] = [
@@ -264,7 +325,14 @@ function enumSchemaFor(name: string): AttributeSchema | null {
 
 export function getAttributeSchema(name: string, tagName?: string): AttributeSchema {
   const normalized = name.toLowerCase()
-  const tag = tagName ? tagName.toLowerCase() : ''
+  const tag = tagName ? normalizeTagName(tagName) : ''
+
+  // Resolved first: several names carry a different meaning on a timing element
+  // than they do on the shape being animated.
+  if (tag && isAnimationTag(tag)) {
+    const animation = animationSchemaFor(name, tag)
+    if (animation) return animation
+  }
 
   if (
     (normalized === 'in' || normalized === 'in2') &&
@@ -351,8 +419,8 @@ export function getAttributeSchema(name: string, tagName?: string): AttributeSch
   return { kind: 'text' }
 }
 
-export function unitsForAttribute(name: string): readonly string[] {
-  return getAttributeSchema(name).units ?? UNITLESS
+export function unitsForAttribute(name: string, tagName?: string): readonly string[] {
+  return getAttributeSchema(name, tagName).units ?? UNITLESS
 }
 
 /**

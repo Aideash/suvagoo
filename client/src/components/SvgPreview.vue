@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import CoordinateReadout from './CoordinateReadout.vue'
 import HandleOverlay from './HandleOverlay.vue'
 import SvgDefsPreview from './SvgDefsPreview.vue'
@@ -8,6 +8,7 @@ import type { DefsPreviewModel } from '../lib/defsPreview'
 import type { IsolatedPreviewModel } from '../lib/isolatedPreview'
 import type { HandleSurface, PathEditState, PointsEditState } from '../lib/handleEdit'
 import type { Point2D } from '../lib/pointsAttribute'
+import { hasAnimation as markupHasAnimation } from '../lib/animationAttribute'
 import { sanitizeSvgMarkup } from '../lib/previewMarkup'
 import { clientToSvgPoint, containsClientPoint, formatCoordinate } from '../lib/svgPointer'
 import { parseViewBoxFromContent } from '../lib/svgSchema'
@@ -62,8 +63,70 @@ function tickFraction(value: number, min: number, span: number): number {
 }
 
 const contentRef = ref<HTMLElement | null>(null)
+const svgHostRef = ref<HTMLElement | null>(null)
 const readoutRef = ref<{ capture: () => void } | null>(null)
 const cursorCoords = ref<Point2D | null>(null)
+
+const hasAnimation = computed(() => markupHasAnimation(sanitized.value))
+const playing = ref(true)
+
+function svgRoot(): SVGSVGElement | null {
+  return svgHostRef.value?.querySelector('svg') ?? null
+}
+
+function applyPlayback(root: SVGSVGElement | null) {
+  if (!root) return
+  if (playing.value) root.unpauseAnimations()
+  else root.pauseAnimations()
+}
+
+function togglePlayback() {
+  playing.value = !playing.value
+  applyPlayback(svgRoot())
+}
+
+const ANIMATION_SELECTOR = 'animate, animateTransform, animateMotion, set'
+
+/**
+ * Rewinding the document clock restarts anything scheduled from the timeline,
+ * but an animation that began from an event, or one frozen by `fill="freeze"`,
+ * only runs again when told to.
+ */
+function restartAnimation() {
+  const root = svgRoot()
+  if (!root) return
+
+  root.setCurrentTime(0)
+  for (const element of root.querySelectorAll<SVGAnimationElement>(ANIMATION_SELECTOR)) {
+    try {
+      element.beginElement()
+    } catch {
+      // `restart="never"` refuses, which is the author's stated intent.
+    }
+  }
+  applyPlayback(root)
+}
+
+/**
+ * Rendering with v-html replaces the whole subtree on every edit, which would
+ * restart the timeline from zero. Reading the clock before the swap and writing
+ * it back afterwards keeps the animation at the phase the user is watching
+ * while they scrub a value. The watcher is pre-flush so it still sees the
+ * outgoing element.
+ */
+watch(
+  sanitized,
+  () => {
+    const elapsed = svgRoot()?.getCurrentTime() ?? 0
+    nextTick(() => {
+      const root = svgRoot()
+      if (!root) return
+      if (elapsed > 0) root.setCurrentTime(elapsed)
+      applyPlayback(root)
+    })
+  },
+  { flush: 'pre' },
+)
 
 const MIN_ZOOM = 1
 const MAX_ZOOM = 20
@@ -304,6 +367,31 @@ function addClickedPoint() {
   >
     <template v-if="sanitized">
       <div v-if="showAxes" class="svg-preview__framed">
+        <div
+          v-if="hasAnimation"
+          class="svg-preview__playback"
+          role="group"
+          aria-label="Animation playback"
+        >
+          <button
+            type="button"
+            class="svg-preview__playback-btn"
+            :title="playing ? 'Pause animation' : 'Play animation'"
+            :aria-pressed="!playing"
+            @click="togglePlayback"
+          >
+            <span class="material-icons">{{ playing ? 'pause' : 'play_arrow' }}</span>
+          </button>
+          <button
+            type="button"
+            class="svg-preview__playback-btn"
+            title="Restart animation"
+            @click="restartAnimation"
+          >
+            <span class="material-icons">replay</span>
+          </button>
+        </div>
+
         <div class="svg-preview__toolbar">
           <div
             v-if="availableModes.length > 1"
@@ -424,7 +512,7 @@ function addClickedPoint() {
             </button>
 
             <div class="svg-preview__viewport" :style="viewTransform">
-              <div class="svg-preview__svg-host" v-html="sanitized" />
+              <div ref="svgHostRef" class="svg-preview__svg-host" v-html="sanitized" />
               <HandleOverlay
                 v-if="documentHandles"
                 :view-box="viewBox"
@@ -662,6 +750,39 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
     gap: $spacing-xs;
   }
 
+  &__playback {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2;
+    display: flex;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--bg-raised) 88%, transparent);
+    border: var(--coord-border-width) solid var(--border);
+    border-radius: $radius-sm;
+  }
+
+  &__playback-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 7px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: $color-text-muted;
+    cursor: pointer;
+
+    & + & {
+      border-left: var(--coord-border-width) solid var(--border);
+    }
+
+    &:hover {
+      color: $color-accent;
+      background: color-mix(in srgb, $color-accent 16%, var(--bg-raised));
+    }
+  }
+
   &__modes {
     display: flex;
     overflow: hidden;
@@ -736,7 +857,8 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
       }
     }
 
-    .svg-preview__toolbar {
+    .svg-preview__toolbar,
+    .svg-preview__playback {
       font-size: 1.5rem;
     }
   }

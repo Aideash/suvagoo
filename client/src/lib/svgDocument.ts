@@ -646,7 +646,10 @@ export function insertChildElement(
 
   const schema = getElementSchema(context.tagName)
   const normalizedChild = normalizeTagName(childTag)
-  if (schema?.contentModel === 'empty') return null
+  // The content model only decides the bare form a shape is written in; what may
+  // be nested inside it is `children`, which is how `<circle/>` still accepts an
+  // animation element.
+  if (schema?.contentModel === 'empty' && !schema.children.length) return null
   if (
     schema &&
     schema.children.length &&
