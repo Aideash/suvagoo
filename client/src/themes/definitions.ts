@@ -423,6 +423,14 @@ export function getThemeById(id: string): Theme | undefined {
   return themes[id]
 }
 
+/**
+ * The value behind a token, for the places a custom property cannot reach —
+ * an image document, say, which never sees the page's stylesheet.
+ */
+export function getThemeToken(themeId: string, token: string): string {
+  return (getThemeById(themeId) ?? themes.dark).tokens[token] ?? ''
+}
+
 export function getThemeList(): Theme[] {
   return Object.values(themes)
 }

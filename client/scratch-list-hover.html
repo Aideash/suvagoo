@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>List preview hover check</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      iframe {
+        width: 1280px;
+        height: 1500px;
+        border: 0;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      // The cards only fetch on hover, which a static screenshot never does.
+      const theme = new URLSearchParams(location.search).get('theme')
+      if (theme) localStorage.setItem('suvagoo.theme-preference', theme)
+
+      const frame = document.createElement('iframe')
+      frame.src = '/'
+      document.body.append(frame)
+
+      function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms))
+      }
+
+      frame.addEventListener('load', async () => {
+        const doc = frame.contentDocument
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          if (doc.querySelector('.svg-card__preview-link')) break
+          await sleep(100)
+        }
+        for (const link of doc.querySelectorAll('.svg-card__preview-link')) {
+          link.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }))
+        }
+
+        // Switching after the previews are on screen: the images have to be
+        // rebuilt for the new text colour.
+        const switchTo = new URLSearchParams(location.search).get('switchTo')
+        if (!switchTo) return
+        await sleep(600)
+        doc.querySelector('button[title="Settings"]')?.click()
+        await sleep(200)
+        for (const button of doc.querySelectorAll('.menu-option')) {
+          if (button.querySelector('.menu-option__name')?.textContent?.trim() === switchTo) {
+            button.click()
+            break
+          }
+        }
+      })
+    </script>
+  </body>
+</html>

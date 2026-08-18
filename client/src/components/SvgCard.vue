@@ -41,7 +41,7 @@ function formatDate(iso: string): string {
       @mouseenter="loadPreview(svg.id)"
       @focusin="loadPreview(svg.id)"
     >
-      <SvgPreview :content="previewContent" empty-message="Hover to preview" />
+      <SvgPreview :content="previewContent" empty-message="Hover to preview" isolate />
     </RouterLink>
 
     <div class="svg-card__body">

@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Preview isolation check</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: #0f1115;
+        color: #e5e9f0;
+        font:
+          13px/1.4 system-ui,
+          sans-serif;
+      }
+      h2 {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 16px 0 6px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .cell {
+        width: 150px;
+        height: 150px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #161920;
+        border: 1px solid #262b36;
+      }
+      .cell svg,
+      .cell img {
+        max-width: 100%;
+        max-height: 100%;
+      }
+      #log {
+        margin-top: 16px;
+        white-space: pre-wrap;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Inline (today): documents share one id space</h2>
+    <div class="row" id="inline"></div>
+
+    <h2>Isolated: one image document each</h2>
+    <div class="row" id="isolated"></div>
+
+    <div id="log"></div>
+
+    <script type="module">
+      import { buildPreviewImage, sanitizeSvgMarkup } from './src/lib/previewMarkup.ts'
+
+      const TEXT = '#e5e9f0'
+
+      // Two documents that disagree about what `#tint` and `#glow` mean, plus a
+      // third leaning on currentColor and a fourth animating, all named alike.
+      const documents = {
+        'blue tint + soft blur': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+            <defs>
+              <linearGradient id="tint"><stop offset="0" stop-color="#6ea8fe"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>
+              <filter id="glow"><feGaussianBlur stdDeviation="1"/></filter>
+            </defs>
+            <style>.frame { stroke-width: 3 }</style>
+            <rect class="frame" x="15" y="15" width="70" height="70" fill="url(#tint)" filter="url(#glow)" stroke="#0b1220"/>
+          </svg>`,
+
+        'pink tint + heavy blur': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+            <defs>
+              <linearGradient id="tint"><stop offset="0" stop-color="#f472d6"/><stop offset="1" stop-color="#fbbf24"/></linearGradient>
+              <filter id="glow"><feGaussianBlur stdDeviation="6"/></filter>
+            </defs>
+            <style>.frame { stroke-width: 0 }</style>
+            <circle class="frame" cx="50" cy="50" r="35" fill="url(#tint)" filter="url(#glow)"/>
+          </svg>`,
+
+        'currentColor, no size': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M4 18 L12 4 L20 18 Z" fill="currentColor"/>
+            <circle cx="12" cy="20" r="2" fill="currentColor" opacity="0.5"/>
+          </svg>`,
+
+        'animated + xlink': `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 100 100" width="100" height="100">
+            <defs><rect id="tile" width="20" height="20" fill="currentColor"/></defs>
+            <use xlink:href="#tile" x="10" y="40"/>
+            <rect x="40" y="40" width="20" height="20" fill="#4ade80">
+              <animate attributeName="y" values="40;10;40" dur="1.4s" repeatCount="indefinite"/>
+            </rect>
+          </svg>`,
+
+        'xlink, undeclared': `<svg viewBox="0 0 100 100" width="100" height="100">
+            <defs><rect id="tile" width="40" height="40" fill="currentColor"/></defs>
+            <use xlink:href="#tile" x="30" y="30"/>
+          </svg>`,
+
+        'own color declared': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" color="#f87171">
+            <circle cx="50" cy="50" r="35" fill="currentColor"/>
+          </svg>`,
+
+        'malformed (unclosed)': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+            <rect x="20" y="20" width="60" height="60" fill="#c084fc">
+          </svg>`,
+
+        'style with < in css': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+            <style>/* 3 < 4 */ rect { fill: #22d3ee }</style>
+            <rect x="20" y="20" width="60" height="60"/>
+          </svg>`,
+      }
+
+      const lines = []
+
+      for (const [label, source] of Object.entries(documents)) {
+        const sanitized = sanitizeSvgMarkup(source)
+
+        const inlineCell = document.createElement('div')
+        inlineCell.className = 'cell'
+        inlineCell.innerHTML = sanitized
+        document.getElementById('inline').append(inlineCell)
+
+        const image = buildPreviewImage(sanitized, TEXT)
+        const isolatedCell = document.createElement('div')
+        isolatedCell.className = 'cell'
+        if (image) {
+          const img = document.createElement('img')
+          img.src = image.src
+          if (!image.intrinsicSize) {
+            img.style.width = '100%'
+            img.style.height = '100%'
+            img.style.objectFit = 'contain'
+          }
+          img.addEventListener('error', () => lines.push(`${label}: IMAGE FAILED TO LOAD`))
+          isolatedCell.append(img)
+        } else {
+          isolatedCell.textContent = 'fell back to inline'
+        }
+        document.getElementById('isolated').append(isolatedCell)
+
+        const decoded = image ? decodeURIComponent(image.src.split(',')[1]) : ''
+        lines.push(
+          [
+            label,
+            `  image: ${image ? 'built' : 'null (inline fallback)'}`,
+            `  intrinsicSize: ${image?.intrinsicSize}`,
+            `  color attr: ${/<svg[^>]*\bcolor="[^"]*"/.exec(decoded)?.[0].match(/color="[^"]*"/)?.[0] ?? 'none'}`,
+            `  xmlns:xlink: ${/xmlns:xlink/.test(decoded)}`,
+          ].join('\n'),
+        )
+      }
+
+      document.getElementById('log').textContent = lines.join('\n')
+    </script>
+  </body>
+</html>

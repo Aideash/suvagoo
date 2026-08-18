@@ -9,9 +9,11 @@ import type { IsolatedPreviewModel } from '../lib/isolatedPreview'
 import type { HandleSurface, PathEditState, PointsEditState } from '../lib/handleEdit'
 import type { Point2D } from '../lib/pointsAttribute'
 import { hasAnimation as markupHasAnimation } from '../lib/animationAttribute'
-import { sanitizeSvgMarkup } from '../lib/previewMarkup'
+import { buildPreviewImage, sanitizeSvgMarkup } from '../lib/previewMarkup'
 import { clientToSvgPoint, containsClientPoint, formatCoordinate } from '../lib/svgPointer'
 import { parseViewBoxFromContent } from '../lib/svgSchema'
+import { useTheme } from '../composables/useTheme'
+import { getThemeToken } from '../themes/definitions'
 
 const props = withDefaults(
   defineProps<{
@@ -24,6 +26,8 @@ const props = withDefaults(
     isolatedPreview?: IsolatedPreviewModel | null
     /** Which surface may draw handles for the edit in `pointsEdit`/`pathEdit`. */
     handleSurface?: HandleSurface | null
+    /** Draw the document as an image, for surfaces showing several at once. */
+    isolate?: boolean
   }>(),
   {
     emptyMessage: 'Nothing to preview',
@@ -33,6 +37,7 @@ const props = withDefaults(
     defsPreview: null,
     isolatedPreview: null,
     handleSurface: null,
+    isolate: false,
   },
 )
 
@@ -46,6 +51,26 @@ const emit = defineEmits<{
 const sanitized = computed(() => sanitizeSvgMarkup(props.content))
 
 const viewBox = computed(() => parseViewBoxFromContent(props.content))
+
+const { resolvedThemeId } = useTheme()
+
+const imageBroken = ref(false)
+
+/**
+ * An image is worth it where documents sit side by side and collide over shared
+ * ids, and a cost everywhere else: it has no live DOM, so nothing can be handled
+ * or hovered and animations waiting on a click never fire. A lone preview has
+ * nothing to collide with, so it stays inline.
+ */
+const previewImage = computed(() => {
+  if (!props.isolate || imageBroken.value) return null
+  return buildPreviewImage(sanitized.value, getThemeToken(resolvedThemeId.value, 'text'))
+})
+
+// New markup deserves its own attempt at rendering as an image.
+watch(sanitized, () => {
+  imageBroken.value = false
+})
 
 const axisSteps = 4
 
@@ -532,6 +557,16 @@ function addClickedPoint() {
         </div>
       </div>
 
+      <div v-else-if="previewImage" class="svg-preview__content">
+        <img
+          class="svg-preview__image"
+          :class="{ 'svg-preview__image--fill': !previewImage.intrinsicSize }"
+          :src="previewImage.src"
+          alt=""
+          @error="imageBroken = true"
+        />
+      </div>
+
       <div v-else class="svg-preview__content" v-html="sanitized" />
     </template>
 
@@ -696,6 +731,19 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
 
     &--panning {
       cursor: grabbing;
+    }
+  }
+
+  &__image {
+    max-width: 100%;
+    max-height: 100%;
+
+    // An image with no size of its own would be laid out at the default
+    // replaced-element size, where the same document inline covered the frame.
+    &--fill {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
     }
   }
 

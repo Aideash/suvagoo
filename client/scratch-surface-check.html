@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Preview surface check</title>
+    <style>
+      body {
+        margin: 0;
+        background: #0f1115;
+        color: #e5e9f0;
+        font:
+          13px/1.5 ui-monospace,
+          monospace;
+      }
+      iframe {
+        width: 1100px;
+        height: 700px;
+        border: 0;
+        display: block;
+      }
+      #log {
+        padding: 12px;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="log">running…</div>
+    <script type="module">
+      // Which element each surface ends up drawing with: an image is isolated,
+      // an inline <svg> keeps its live DOM (handles, hover, click-run animation).
+      const VIEW_ID = 'e98cb80b-8b81-4daa-813d-df0945236daf'
+
+      function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms))
+      }
+
+      function load(src) {
+        return new Promise((resolve) => {
+          const frame = document.createElement('iframe')
+          frame.src = src
+          frame.addEventListener('load', () => resolve(frame))
+          document.body.append(frame)
+        })
+      }
+
+      async function drawnWith(frame, { hover } = {}) {
+        const doc = frame.contentDocument
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          if (doc.querySelector(hover ?? '.svg-preview')) break
+          await sleep(100)
+        }
+        if (hover) {
+          for (const link of doc.querySelectorAll(hover)) {
+            link.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }))
+          }
+        }
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          const drawn = doc.querySelector('.svg-preview__content > *')
+          if (drawn) return drawn.tagName.toLowerCase()
+          await sleep(100)
+        }
+        return 'nothing'
+      }
+
+      const list = await load('/')
+      const listTag = await drawnWith(list, { hover: '.svg-card__preview-link' })
+
+      const view = await load(`/view/${VIEW_ID}`)
+      const viewTag = await drawnWith(view)
+
+      document.getElementById('log').textContent =
+        `ListView card preview: <${listTag}>\nViewView preview:     <${viewTag}>`
+    </script>
+  </body>
+</html>
