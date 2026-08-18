@@ -1,6 +1,6 @@
-import { buildSvgCopy } from './src/lib/svgCopy'
-import { formatSvgSource } from './src/lib/svgFormat'
-import { STARTER_SVG } from './src/api/svgs'
+import { buildSvgCopy } from '../src/lib/svgCopy'
+import { formatSvgSource } from '../src/lib/svgFormat'
+import { STARTER_SVG } from '../src/api/svgs'
 
 const SAMPLE = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">

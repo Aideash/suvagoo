@@ -1,11 +1,12 @@
 import { writeFileSync } from 'node:fs'
-import { formatPathD, parsePathD } from './src/lib/pathAttribute'
+import { join } from 'node:path'
+import { formatPathD, parsePathD } from '../src/lib/pathAttribute'
 import {
   buildCompletion,
   completionTailD,
   DEFAULT_COMPLETION_OPTIONS,
   type CompletionOptions,
-} from './src/lib/pathCompletion'
+} from '../src/lib/pathCompletion'
 
 const cases: { label: string; d: string; options: Partial<CompletionOptions> }[] = [
   {
@@ -85,6 +86,6 @@ cases.forEach((item, i) => {
 
 const rows = Math.ceil(cases.length / cols)
 writeFileSync(
-  'scratch-width-check.svg',
+  join(import.meta.dirname, 'scratch-width-check.svg'),
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 ${cols * (cell + gap) + 2} ${rows * (cell + gap + 5) + 2}" width="900"><rect x="-2" y="-2" width="100%" height="100%" fill="#fff"/>${parts.join('')}</svg>`,
 )
