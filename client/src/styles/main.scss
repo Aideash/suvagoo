@@ -230,7 +230,9 @@ button.ghost {
     display: flex;
     align-items: center;
     gap: $spacing-sm;
+    flex-grow: 1;
     flex-shrink: 0;
+    justify-content: flex-end;
   }
 }
 
@@ -274,7 +276,8 @@ button.ghost {
   background: var(--scrollbar-hover);
 }
 
-::-webkit-scrollbar-track {
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
   background: transparent;
 }
 

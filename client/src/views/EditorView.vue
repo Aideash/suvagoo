@@ -657,7 +657,10 @@ function onPreviewUpdatePath(value: string) {
     align-items: center;
     gap: $spacing-md;
     flex: 1;
-    min-width: 0;
+
+    button {
+      text-wrap: nowrap;
+    }
   }
 
   &__name {
@@ -669,6 +672,7 @@ function onPreviewUpdatePath(value: string) {
     flex: 0 1 10rem;
     min-width: 7rem;
     max-width: 12rem;
+    cursor: pointer;
   }
 
   &__autosave {

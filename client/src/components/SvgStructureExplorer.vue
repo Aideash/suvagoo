@@ -219,7 +219,7 @@ function treeIndexForPath(path: PathSegment[]): number {
   return flatTree.value.findIndex((row) => pathsEqual(row.node.path, path))
 }
 
-function onTreeClick(path: PathSegment[], event: MouseEvent) {
+function onTreeActivate(path: PathSegment[], event: MouseEvent | KeyboardEvent) {
   const index = treeIndexForPath(path)
   const meta = event.metaKey || event.ctrlKey
 
@@ -414,7 +414,9 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
                 selected: isMultiSelected(row.node.path),
               }"
               :title="`Select ${formatElementPath(row.node.path)}`"
-              @click="onTreeClick(row.node.path, $event)"
+              @click="onTreeActivate(row.node.path, $event)"
+              @keydown.enter.prevent="onTreeActivate(row.node.path, $event)"
+              @keydown.space.prevent="onTreeActivate(row.node.path, $event)"
             >
               <span class="svg-explorer__tree-tag">{{ childLabel(row.node) }}</span>
               <span
@@ -835,6 +837,11 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
 
     &.selected.active {
       background: color-mix(in srgb, var(--accent) 20%, transparent);
+    }
+
+    &.selected:focus-visible {
+      outline-color: $color-accent;
+      outline-width: 2px;
     }
   }
 
