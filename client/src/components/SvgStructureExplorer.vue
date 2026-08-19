@@ -58,7 +58,7 @@ const emit = defineEmits<{
 const { isPreFilled, toggleSnippetMode } = useSnippetMode()
 
 const filter = ref('')
-const explorerMode = ref<'insert' | 'scrub' | 'delete'>('insert')
+const explorerMode = ref<'insert' | 'delete'>('insert')
 const deleteMode = computed(() => explorerMode.value === 'delete')
 const showAllAttributes = ref(false)
 const showAllChildren = ref(false)
@@ -91,8 +91,13 @@ function toggleDeleteMode() {
   explorerMode.value = deleteMode.value ? 'insert' : 'delete'
 }
 
-function setExplorerMode(mode: 'insert' | 'scrub' | 'delete') {
+function setExplorerMode(mode: 'insert' | 'delete') {
   explorerMode.value = mode
+}
+
+function onDeleteChild(path: PathSegment[]) {
+  selectionAnchorIndex.value = null
+  emit('deleteChild', path)
 }
 
 function onGlobalKeydown(event: KeyboardEvent) {
@@ -234,26 +239,29 @@ function treeIndexForPath(path: PathSegment[]): number {
 
 function onTreeActivate(path: PathSegment[], event: MouseEvent | KeyboardEvent) {
   const index = treeIndexForPath(path)
-  const meta = event.metaKey || event.ctrlKey
 
-  if (event.shiftKey && selectionAnchorIndex.value != null && index >= 0) {
-    const from = Math.min(selectionAnchorIndex.value, index)
-    const to = Math.max(selectionAnchorIndex.value, index)
-    const range = flatTree.value.slice(from, to + 1).map((row) => row.node.path)
-    emit('selectionChange', range)
-    emit('selectElement', path)
-    return
-  }
+  if (explorerMode.value === 'insert') {
+    const meta = event.metaKey || event.ctrlKey
 
-  if (meta) {
-    const exists = props.selectedPaths.some((selected) => pathsEqual(selected, path))
-    const next = exists
-      ? props.selectedPaths.filter((selected) => !pathsEqual(selected, path))
-      : [...props.selectedPaths, path]
-    emit('selectionChange', next)
-    selectionAnchorIndex.value = index >= 0 ? index : selectionAnchorIndex.value
-    emit('selectElement', path)
-    return
+    if (event.shiftKey && selectionAnchorIndex.value != null && index >= 0) {
+      const from = Math.min(selectionAnchorIndex.value, index)
+      const to = Math.max(selectionAnchorIndex.value, index)
+      const range = flatTree.value.slice(from, to + 1).map((row) => row.node.path)
+      emit('selectionChange', range)
+      emit('selectElement', path)
+      return
+    }
+
+    if (meta) {
+      const exists = props.selectedPaths.some((selected) => pathsEqual(selected, path))
+      const next = exists
+        ? props.selectedPaths.filter((selected) => !pathsEqual(selected, path))
+        : [...props.selectedPaths, path]
+      emit('selectionChange', next)
+      selectionAnchorIndex.value = index >= 0 ? index : selectionAnchorIndex.value
+      emit('selectElement', path)
+      return
+    }
   }
 
   // Regular click - 1. set in transform, 2. deselect all
@@ -336,7 +344,6 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
   <div
     class="svg-explorer"
     :class="{
-      'svg-explorer--scrub': explorerMode === 'scrub',
       'svg-explorer--delete': deleteMode,
     }"
   >
@@ -348,9 +355,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
         :placeholder="
           deleteMode
             ? 'Filter existing elements and attributes…'
-            : explorerMode === 'scrub'
-              ? 'Filter numeric attributes…'
-              : 'Filter elements and attributes…'
+            : 'Filter elements and attributes…'
         "
         :disabled="!context && !flatTree.length"
       />
@@ -366,16 +371,6 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
           >
             <span class="material-icons sm" aria-hidden="true">add</span>
             Insert
-          </button>
-          <button
-            type="button"
-            class="svg-explorer__mode-button"
-            :class="{ active: explorerMode === 'scrub' }"
-            :aria-pressed="explorerMode === 'scrub'"
-            @click="setExplorerMode('scrub')"
-          >
-            <span class="material-icons sm" aria-hidden="true">swap_horiz</span>
-            Scrub
           </button>
           <button
             type="button"
@@ -412,7 +407,9 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       <section class="svg-explorer__section">
         <h3 class="svg-explorer__heading">Document</h3>
         <p class="svg-explorer__hint">Click to select</p>
-        <p class="svg-explorer__hint">Bulk Transform: ⌘/Ctrl+click toggle · Shift+click range</p>
+        <p v-if="explorerMode === 'insert'" class="svg-explorer__hint">
+          Bulk Transform: ⌘/Ctrl+click toggle · Shift+click range
+        </p>
         <ul v-if="flatTree.length" class="svg-explorer__tree">
           <li
             v-for="row in flatTree"
@@ -424,7 +421,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
               class="svg-explorer__tree-row"
               :class="{
                 active: isActivePath(row.node.path),
-                selected: isMultiSelected(row.node.path),
+                selected: isMultiSelected(row.node.path) && explorerMode === 'insert',
               }"
               :title="`Select ${formatElementPath(row.node.path)}`"
               @click="onTreeActivate(row.node.path, $event)"
@@ -454,7 +451,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
               type="button"
               class="svg-explorer__chip svg-explorer__chip--danger"
               :title="`Delete ${formatElementPath(child.path)}`"
-              @click="emit('deleteChild', child.path)"
+              @click="onDeleteChild(child.path)"
             >
               {{ childLabel(child) }}
             </button>
@@ -484,16 +481,6 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
           Nothing to remove on this element.
         </p>
       </template>
-
-      <NumericAttributeScrubPanel
-        v-else-if="explorerMode === 'scrub' && context"
-        :content="content"
-        :context="context"
-        :filter="filter"
-        :active-attribute-name="activeAttribute?.attrName"
-        @update="onScrubUpdate"
-        @select="onAttributeChipClick"
-      />
 
       <template v-else-if="explorerMode === 'insert'">
         <section v-if="schema?.children.length" class="svg-explorer__section">
@@ -591,7 +578,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       </template>
 
       <SvgAttributeAdjuster
-        v-if="activeAttribute"
+        v-if="explorerMode === 'insert' && activeAttribute"
         :key="attributeIdentity(activeAttribute)"
         :attribute="activeAttribute"
         :content="content"
@@ -604,7 +591,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       />
 
       <BulkTransformPanel
-        v-if="selectedPaths.length"
+        v-if="explorerMode === 'insert' && selectedPaths.length"
         :content="content"
         :selected-paths="selectedPaths"
         :session="transformSession"
@@ -612,6 +599,16 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
         @update:session="emit('update:transformSession', $event)"
         @commit="emit('transformCommit')"
         @cancel="emit('transformCancel')"
+      />
+
+      <NumericAttributeScrubPanel
+        v-if="explorerMode === 'insert' && context"
+        :content="content"
+        :context="context"
+        :filter="filter"
+        :active-attribute-name="activeAttribute?.attrName"
+        @update="onScrubUpdate"
+        @select="onAttributeChipClick"
       />
     </div>
   </div>
@@ -667,10 +664,6 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
     border-color: color-mix(in srgb, var(--red) 45%, transparent);
   }
 
-  &--scrub {
-    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  }
-
   &__toolbar {
     display: flex;
     flex-direction: column;
@@ -696,7 +689,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
 
   &__mode-options {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     padding: 2px;
     border: 1px solid $color-border;
     border-radius: $radius-sm;

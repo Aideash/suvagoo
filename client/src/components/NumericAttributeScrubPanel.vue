@@ -165,6 +165,8 @@ function onTextEscape(event: KeyboardEvent, name: string) {
 
 .numeric-scrub {
   margin-bottom: $spacing-md;
+  padding-top: $spacing-sm;
+  border-top: 1px solid $color-border;
 
   &__header {
     display: flex;

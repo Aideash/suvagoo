@@ -569,20 +569,20 @@ function removeAttributeFromOpenTag(openTag: string, attrName: string): string |
   return openTag.replace(pattern, '')
 }
 
+/**
+ * An element that owns its line takes that whole line with it — its indentation
+ * and the newline that ends it, but never the newline before it as well, or the
+ * next sibling gets pulled up onto the previous line.
+ */
 function trimDeletionRange(content: string, start: number, end: number) {
   let nextStart = start
-  let nextEnd = end
-
   while (nextStart > 0 && /[ \t]/.test(content[nextStart - 1])) {
     nextStart -= 1
   }
-  if (nextStart > 0 && content[nextStart - 1] === '\n') {
-    nextStart -= 1
-    while (nextStart > 0 && /[ \t]/.test(content[nextStart - 1])) {
-      nextStart -= 1
-    }
-  }
+  const ownsLine = nextStart === 0 || content[nextStart - 1] === '\n'
+  if (!ownsLine) return { start: nextStart, end }
 
+  let nextEnd = end
   while (nextEnd < content.length && /[ \t]/.test(content[nextEnd])) {
     nextEnd += 1
   }
@@ -719,6 +719,29 @@ export function deleteAttribute(
   return { content: next, cursor }
 }
 
+/**
+ * A shape only spells out an open and close tag so it can hold something —
+ * usually an animation. Once that content is gone the pair says nothing the
+ * self-closing form does not, so fold it back.
+ */
+function collapseToSelfClosing(content: string, path: PathSegment[]): EditResult | null {
+  if (!path.length) return null
+
+  const node = findNodeByPath(parseIndexedDocument(content), path)
+  if (!node || node.selfClosing || node.closeTagEnd == null) return null
+  if (node.children.length) return null
+  if (getElementSchema(node.tag)?.contentModel !== 'empty') return null
+
+  const closeTagStart = content.lastIndexOf('<', node.closeTagEnd - 1)
+  if (closeTagStart < node.openTagEnd) return null
+  if (content.slice(node.openTagEnd, closeTagStart).trim()) return null
+
+  const openTag = content.slice(node.openTagStart, node.openTagEnd)
+  const selfClosed = openTag.replace(/\s*>$/, '/>')
+  const next = content.slice(0, node.openTagStart) + selfClosed + content.slice(node.closeTagEnd)
+  return { content: next, cursor: node.openTagStart + selfClosed.length - 2 }
+}
+
 export function deleteChildElement(content: string, path: PathSegment[]): EditResult | null {
   const node = findNodeByPath(parseIndexedDocument(content), path)
   if (!node) return null
@@ -727,7 +750,52 @@ export function deleteChildElement(content: string, path: PathSegment[]): EditRe
   const trimmed = trimDeletionRange(content, node.openTagStart, end)
   const next = content.slice(0, trimmed.start) + content.slice(trimmed.end)
   const cursor = Math.min(trimmed.start, next.length)
-  return { content: next, cursor }
+  return collapseToSelfClosing(next, path.slice(0, -1)) ?? { content: next, cursor }
+}
+
+/**
+ * Deleting an element renumbers the same-tag siblings that follow it, so a
+ * stored selection has to shift down with them or it starts pointing at its
+ * neighbour. Anything inside the deleted subtree has nothing left to point at.
+ */
+export function remapPathsAfterDelete(
+  paths: PathSegment[][],
+  deleted: PathSegment[],
+): PathSegment[][] {
+  if (!deleted.length) return paths
+
+  const depth = deleted.length - 1
+  const parent = deleted.slice(0, depth)
+  const removed = deleted[depth]
+  const kept: PathSegment[][] = []
+
+  for (const path of paths) {
+    if (path.length <= depth) {
+      kept.push(path)
+      continue
+    }
+    if (!pathsEqual(path.slice(0, depth), parent)) {
+      kept.push(path)
+      continue
+    }
+
+    const segment = path[depth]
+    if (segment.tag !== removed.tag) {
+      kept.push(path)
+      continue
+    }
+    if (segment.index === removed.index) continue
+    if (segment.index < removed.index) {
+      kept.push(path)
+      continue
+    }
+
+    const shifted = [...path]
+    shifted[depth] = { tag: segment.tag, index: segment.index - 1 }
+    kept.push(shifted)
+  }
+
+  return kept
 }
 
 export function formatElementPath(path: PathSegment[]): string {

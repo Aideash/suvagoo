@@ -14,6 +14,7 @@ import {
   findElementAtOffset,
   insertAttribute,
   insertChildElement,
+  remapPathsAfterDelete,
   updateAttribute,
   type AttributeContext,
   type PathSegment,
@@ -445,6 +446,11 @@ function onDeleteChild(path: PathSegment[]) {
     builderError.value = 'Could not delete that element.'
     return
   }
+  const remaining = remapPathsAfterDelete(selectedPaths.value, path)
+  if (remaining.length !== selectedPaths.value.length) {
+    transformSession.value = createIdentitySession(selectionPivot(result.content, remaining))
+  }
+  selectedPaths.value = remaining
   editorRef.value?.applyChange(result.content, result.cursor)
 }
 

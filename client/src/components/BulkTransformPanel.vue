@@ -188,6 +188,7 @@ function uniqueTags(tags: string[]): string {
   flex-direction: column;
   gap: $spacing-sm;
   padding: $spacing-sm;
+  margin-bottom: $spacing-sm;
   border: 1px solid var(--border);
   border-radius: $radius-sm;
   background: color-mix(in srgb, var(--accent) 6%, transparent);
