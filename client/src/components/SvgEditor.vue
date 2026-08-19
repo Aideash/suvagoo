@@ -1,15 +1,24 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Compartment } from '@codemirror/state'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Compartment, type EditorState } from '@codemirror/state'
 import { EditorView, basicSetup } from 'codemirror'
 import { xml } from '@codemirror/lang-xml'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import {
+  closeLintPanel,
+  forEachDiagnostic,
+  lintGutter,
+  linter,
+  openLintPanel,
+  setDiagnosticsEffect,
+} from '@codemirror/lint'
 import { tags } from '@lezer/highlight'
 import PopMenu from './PopMenu.vue'
 import { copyText } from '../lib/clipboard'
 import { cursorOffsetForPath, findElementAtOffset } from '../lib/svgDocument'
 import { buildSvgCopy, type SvgCopyFormat } from '../lib/svgCopy'
 import { formatSvgSource, type SvgFormatLayout } from '../lib/svgFormat'
+import { lintSvgSource } from '../lib/svgLint'
 
 const props = defineProps<{
   modelValue: string
@@ -41,6 +50,9 @@ const showEditor = ref(true)
 /** Only lights up the button that was last used; formatting is never automatic. */
 const lastLayout = ref<SvgFormatLayout | null>(null)
 const copied = ref(false)
+const errorCount = ref(0)
+const warningCount = ref(0)
+const problemsOpen = ref(false)
 const wrapCompartment = new Compartment()
 let view: EditorView | null = null
 let applyingExternal = false
@@ -71,6 +83,59 @@ const highlighting = HighlightStyle.define([
   { tag: [tags.comment, tags.lineComment], color: 'var(--syntax-comment)', fontStyle: 'italic' },
   { tag: tags.invalid, color: 'var(--red)' },
 ])
+
+const svgLinter = linter(
+  (target) =>
+    lintSvgSource(target.state.doc.toString()).map((problem) => ({
+      from: problem.from,
+      to: problem.to,
+      severity: problem.severity,
+      message: problem.message,
+      source: problem.rule,
+    })),
+  { delay: 300 },
+)
+
+const problemLabel = computed(() => {
+  const parts: string[] = []
+  if (errorCount.value) parts.push(`${errorCount.value} error${errorCount.value === 1 ? '' : 's'}`)
+  if (warningCount.value) {
+    parts.push(`${warningCount.value} warning${warningCount.value === 1 ? '' : 's'}`)
+  }
+  return parts.length ? parts.join(', ') : 'No problems'
+})
+
+const problemIcon = computed(() => {
+  if (errorCount.value) return 'error'
+  return warningCount.value ? 'warning' : 'check_circle'
+})
+
+function refreshProblemCounts(state: EditorState) {
+  let errors = 0
+  let warnings = 0
+  forEachDiagnostic(state, (diagnostic) => {
+    if (diagnostic.severity === 'error') errors += 1
+    else if (diagnostic.severity === 'warning') warnings += 1
+  })
+  errorCount.value = errors
+  warningCount.value = warnings
+}
+
+/**
+ * The panel carries its own close button and a keybinding, so its presence in
+ * the DOM is the only reliable answer. Scoped to the panel row to keep the
+ * lookup off the document content.
+ */
+function syncProblemsOpen() {
+  problemsOpen.value = Boolean(view?.dom.querySelector(':scope > .cm-panels > .cm-panel-lint'))
+}
+
+function toggleProblems() {
+  if (!view) return
+  if (problemsOpen.value) closeLintPanel(view)
+  else openLintPanel(view)
+  syncProblemsOpen()
+}
 
 function toggleLineWrap() {
   if (!view) return
@@ -138,6 +203,8 @@ onMounted(() => {
       xml(),
       editorTheme,
       syntaxHighlighting(highlighting),
+      svgLinter,
+      lintGutter(),
       wrapCompartment.of([]),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !applyingExternal) {
@@ -146,6 +213,11 @@ onMounted(() => {
         if (update.selectionSet || update.docChanged) {
           emitCursor()
         }
+        const diagnosticsChanged = update.transactions.some((transaction) =>
+          transaction.effects.some((effect) => effect.is(setDiagnosticsEffect)),
+        )
+        if (diagnosticsChanged) refreshProblemCounts(update.state)
+        syncProblemsOpen()
       }),
     ],
   })
@@ -234,6 +306,20 @@ onBeforeUnmount(() => {
         <span class="material-icons sm">unfold_less</span>
         <span class="svg-editor__tool-label">Compact</span>
       </button>
+      <button
+        type="button"
+        class="svg-editor__tool svg-editor__problems"
+        :class="{
+          'svg-editor__problems--error': errorCount > 0,
+          'svg-editor__problems--warning': !errorCount && warningCount > 0,
+          active: problemsOpen,
+        }"
+        :title="problemsOpen ? 'Hide the problem list' : 'Show the problem list'"
+        @click="toggleProblems"
+      >
+        <span class="material-icons sm">{{ problemIcon }}</span>
+        <span class="svg-editor__tool-label">{{ problemLabel }}</span>
+      </button>
       <span class="svg-editor__divider" />
       <span class="svg-editor__copy">
         <PopMenu
@@ -294,7 +380,7 @@ onBeforeUnmount(() => {
     padding: $spacing-xs $spacing-sm;
     border-bottom: 1px solid $color-border;
 
-    .svg-editor__copy {
+    .svg-editor__problems {
       margin-left: auto;
     }
   }
@@ -342,6 +428,19 @@ onBeforeUnmount(() => {
 
   &__tool-label {
     font-weight: 500;
+  }
+
+  /* Severity wins over the accent the open panel would otherwise paint on. */
+  &__problems {
+    &--error,
+    &--error:hover {
+      color: $color-danger;
+    }
+
+    &--warning,
+    &--warning:hover {
+      color: var(--amber);
+    }
   }
 
   &__content {

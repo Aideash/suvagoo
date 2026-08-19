@@ -138,7 +138,8 @@ const ANIMATION_VALUE_ATTRIBUTES = [
   'accumulate',
 ] as const
 
-const FILTER_PRIMITIVE_CHILDREN = [
+/** The primitives a `<filter>` is built from, and which live only inside one. */
+export const FILTER_PRIMITIVE_ELEMENTS = [
   'feBlend',
   'feColorMatrix',
   'feComponentTransfer',
@@ -171,7 +172,7 @@ const FILTER_ANIMATION_ELEMENTS = ['animate', 'set'] as const
 /** Filter elements an animation can be attached to, which is all of them. */
 const FILTER_ANIMATABLE_TAGS = [
   'filter',
-  ...FILTER_PRIMITIVE_CHILDREN,
+  ...FILTER_PRIMITIVE_ELEMENTS,
   'feMergeNode',
   ...FE_FUNC_CHILDREN,
   ...FE_LIGHT_CHILDREN,
@@ -505,7 +506,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       'href',
       ...FE_GLOBAL_ATTRIBUTES,
     ],
-    children: [...FILTER_PRIMITIVE_CHILDREN],
+    children: [...FILTER_PRIMITIVE_ELEMENTS],
     snippet: `<filter id="filter-id">
   <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
 </filter>`,

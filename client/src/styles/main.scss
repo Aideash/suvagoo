@@ -422,6 +422,83 @@ button.ghost {
   color: var(--text) !important;
 }
 
+// Lint — squiggles, gutter markers, and the problem list.
+.cm-lintRange {
+  // Replaces the built-in wavy data URI, which is a fixed colour.
+  background-image: none !important;
+  text-decoration: underline wavy;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+
+.cm-lintRange-error {
+  text-decoration-color: var(--red);
+}
+
+.cm-lintRange-warning {
+  text-decoration-color: var(--amber);
+}
+
+.cm-lintRange-active {
+  background-color: color-mix(in srgb, var(--accent) 22%, transparent) !important;
+}
+
+.cm-lint-marker {
+  content: normal !important;
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0.15em;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+}
+
+.cm-lint-marker-error::after {
+  background: var(--red);
+}
+
+.cm-lint-marker-warning::after {
+  background: var(--amber);
+}
+
+.cm-panel.cm-panel-lint {
+  ul {
+    max-height: 140px;
+    font-family: var(--mono) !important;
+    font-size: 0.8125rem;
+
+    [aria-selected] {
+      background-color: color-mix(in srgb, var(--accent) 18%, transparent) !important;
+      color: var(--text) !important;
+    }
+  }
+
+  [name='close'] {
+    padding: 0 6px !important;
+    color: var(--text-dim);
+    cursor: pointer;
+
+    &:hover {
+      color: var(--text);
+    }
+  }
+}
+
+.cm-diagnostic-error {
+  border-left: 3px solid var(--red) !important;
+}
+
+.cm-diagnostic-warning {
+  border-left: 3px solid var(--amber) !important;
+}
+
+.cm-diagnosticSource {
+  color: var(--text-faint);
+}
+
 .cm-dialog {
   background: var(--bg-raised) !important;
   color: var(--text) !important;
