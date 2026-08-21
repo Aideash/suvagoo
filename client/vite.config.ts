@@ -13,6 +13,9 @@ export default defineConfig(({ mode }) => {
     plugins: [vue()],
     server: {
       port: serverPort,
+      // Reached through the local Caddy reverse proxy, which forwards the
+      // original Host header. Vite rejects unrecognised hosts with a 403.
+      allowedHosts: [env.DOMAIN ?? 'localhost'],
       proxy: {
         '/api': `http://localhost:${apiPort}`,
       },
