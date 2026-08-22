@@ -13,6 +13,20 @@ router.get('/', async (_req, res) => {
   }
 })
 
+router.get('/:id/svg', async (req, res) => {
+  try {
+    const svg = await getSvg(req.params.id)
+    if (!svg) {
+      res.status(404).json({ error: 'SVG not found' })
+      return
+    }
+    res.type('image/svg+xml').send(svg.content)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Failed to get SVG' })
+  }
+})
+
 router.get('/:id', async (req, res) => {
   try {
     const svg = await getSvg(req.params.id)

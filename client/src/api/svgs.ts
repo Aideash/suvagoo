@@ -43,6 +43,15 @@ export async function getSvg(id: string): Promise<SvgRecord> {
   return handleResponse<SvgRecord>(res)
 }
 
+export async function getSvgMarkup(id: string): Promise<string> {
+  const res = await fetch(`/api/svgs/${id}/svg`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error ?? res.statusText)
+  }
+  return res.text()
+}
+
 export async function createSvg(input: CreateSvgInput): Promise<SvgRecord> {
   const res = await fetch('/api/svgs', {
     method: 'POST',
