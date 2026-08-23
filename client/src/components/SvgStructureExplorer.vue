@@ -192,6 +192,23 @@ function childLabel(node: IndexedDocumentNode): string {
   return formatPathSegment(segment)
 }
 
+function isIdAttribute(name: string): boolean {
+  return name.toLowerCase() === 'id'
+}
+
+function elementId(node: IndexedDocumentNode): string | null {
+  const key = Object.keys(node.attributes).find(isIdAttribute)
+  if (!key) return null
+  const value = node.attributes[key]?.trim()
+  return value || null
+}
+
+function treeAttributeNames(node: IndexedDocumentNode): string[] {
+  return Object.keys(node.attributes)
+    .filter((name) => !isIdAttribute(name))
+    .slice(0, 3)
+}
+
 const existingChildren = computed(() => {
   const children = selectedNode.value?.children ?? []
   return children.filter((child) => matchesNeedle(childLabel(child)))
@@ -220,8 +237,20 @@ function pathKey(path: PathSegment[]): string {
 function renderTreeLines(
   node: IndexedDocumentNode,
   depth = 0,
-): Array<{ node: IndexedDocumentNode; depth: number }> {
-  const rows: Array<{ node: IndexedDocumentNode; depth: number }> = [{ node, depth }]
+): Array<{
+  node: IndexedDocumentNode
+  depth: number
+  id: string | null
+  attrNames: string[]
+}> {
+  const rows = [
+    {
+      node,
+      depth,
+      id: elementId(node),
+      attrNames: treeAttributeNames(node),
+    },
+  ]
   for (const child of node.children) {
     rows.push(...renderTreeLines(child, depth + 1))
   }
@@ -428,12 +457,11 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
               @keydown.enter.prevent="onTreeActivate(row.node.path, $event)"
               @keydown.space.prevent="onTreeActivate(row.node.path, $event)"
             >
-              <span class="svg-explorer__tree-tag">{{ childLabel(row.node) }}</span>
-              <span
-                v-for="name in Object.keys(row.node.attributes).slice(0, 3)"
-                :key="name"
-                class="svg-explorer__tree-attr"
-              >
+              <span class="svg-explorer__tree-label">
+                <span class="svg-explorer__tree-tag">{{ childLabel(row.node) }}</span>
+                <span v-if="row.id" class="svg-explorer__tree-id">#{{ row.id }}</span>
+              </span>
+              <span v-for="name in row.attrNames" :key="name" class="svg-explorer__tree-attr">
                 {{ name }}
               </span>
             </button>
@@ -738,7 +766,28 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: $spacing-sm;
+    padding: 0 $spacing-sm;
+
+    &:before {
+      content: ' ';
+      display: block;
+      min-height: 1.25rem;
+      width: 100%;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: linear-gradient(180deg, var(--bg-raised) 30%, transparent);
+    }
+
+    &:after {
+      content: ' ';
+      display: block;
+      min-height: 1rem;
+      width: 100%;
+      position: sticky;
+      bottom: 0;
+      background: linear-gradient(0deg, var(--bg-raised) 30%, transparent);
+    }
   }
 
   &__section {
@@ -882,12 +931,22 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
     color: $color-text-muted;
   }
 
+  &__tree-label {
+    display: inline-flex;
+    align-items: baseline;
+  }
+
   &__tree-tag {
     color: $color-text;
   }
 
+  &__tree-id {
+    color: var(--text-dim);
+    font-weight: 400;
+  }
+
   &__tree-attr {
-    color: $color-text-muted;
+    color: var(--text-faint);
     &::before {
       content: '@';
       opacity: 0.6;
