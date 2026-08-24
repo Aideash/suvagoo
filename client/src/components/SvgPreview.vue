@@ -28,6 +28,22 @@ const props = withDefaults(
     handleSurface?: HandleSurface | null
     /** Draw the document as an image, for surfaces showing several at once. */
     isolate?: boolean
+    /** CSS `color`, inherited by the SVG as `currentColor`. */
+    color?: string
+    /**
+     * Preview backdrop. `checkered` is the themed transparency pattern;
+     * any other string is used as a CSS background.
+     */
+    backdrop?: string
+    /** CSS pixel width of the SVG. Omit with `svgHeight` to fill the frame. */
+    svgWidth?: number
+    /** CSS pixel height of the SVG. Omit with `svgWidth` to fill the frame. */
+    svgHeight?: number
+    /**
+     * Optional label rendered beside the SVG. `null` hides it; an empty
+     * string still reserves the slot so typing doesn't collapse the layout.
+     */
+    sampleText?: string | null
   }>(),
   {
     emptyMessage: 'Nothing to preview',
@@ -38,6 +54,11 @@ const props = withDefaults(
     isolatedPreview: null,
     handleSurface: null,
     isolate: false,
+    color: undefined,
+    backdrop: 'checkered',
+    svgWidth: undefined,
+    svgHeight: undefined,
+    sampleText: null,
   },
 )
 
@@ -62,9 +83,36 @@ const imageBroken = ref(false)
  * or hovered and animations waiting on a click never fire. A lone preview has
  * nothing to collide with, so it stays inline.
  */
+const previewColor = computed(() => props.color || getThemeToken(resolvedThemeId.value, 'text'))
+
 const previewImage = computed(() => {
   if (!props.isolate || imageBroken.value) return null
-  return buildPreviewImage(sanitized.value, getThemeToken(resolvedThemeId.value, 'text'))
+  return buildPreviewImage(sanitized.value, previewColor.value)
+})
+
+const sized = computed(() => {
+  const width = props.svgWidth
+  const height = props.svgHeight
+  if (width == null && height == null) return null
+  return {
+    width: width ?? height ?? 0,
+    height: height ?? width ?? 0,
+  }
+})
+
+const hasSpecimenLayout = computed(() => sized.value != null || props.sampleText != null)
+
+const surfaceStyle = computed(() => {
+  const style: Record<string, string> = {}
+  if (props.color) style.color = props.color
+  if (props.backdrop && props.backdrop !== 'checkered') {
+    style.background = props.backdrop
+  }
+  if (sized.value) {
+    style['--preview-svg-width'] = `${sized.value.width}px`
+    style['--preview-svg-height'] = `${sized.value.height}px`
+  }
+  return style
 })
 
 // New markup deserves its own attempt at rendering as an image.
@@ -388,7 +436,11 @@ function addClickedPoint() {
   <div
     ref="svgPreviewRef"
     class="svg-preview"
-    :class="{ 'svg-preview--framed': showAxes && sanitized }"
+    :class="{
+      'svg-preview--framed': showAxes && sanitized,
+      'svg-preview--specimen': hasSpecimenLayout,
+    }"
+    :style="surfaceStyle"
   >
     <template v-if="sanitized">
       <div v-if="showAxes" class="svg-preview__framed">
@@ -567,6 +619,20 @@ function addClickedPoint() {
         />
       </div>
 
+      <div
+        v-else-if="hasSpecimenLayout"
+        class="svg-preview__content svg-preview__content--specimen"
+        :class="{ 'svg-preview__content--sized': sized }"
+      >
+        <div
+          class="svg-preview__specimen"
+          :class="{ 'svg-preview__specimen--labeled': sampleText != null }"
+        >
+          <div class="svg-preview__graphic" v-html="sanitized" />
+          <span v-if="sampleText != null" class="svg-preview__sample-text">{{ sampleText }}</span>
+        </div>
+      </div>
+
       <div v-else class="svg-preview__content" v-html="sanitized" />
     </template>
 
@@ -594,6 +660,11 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
     50% / 20px 20px;
   border-radius: $radius-md;
   overflow: hidden;
+  color: $color-text;
+
+  &--specimen {
+    overflow: auto;
+  }
 
   &--framed {
     padding: $spacing-sm;
@@ -732,6 +803,73 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
     &--panning {
       cursor: grabbing;
     }
+
+    &--specimen:not(&--sized) {
+      .svg-preview__specimen {
+        width: 100%;
+        height: 100%;
+      }
+
+      .svg-preview__graphic {
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        :deep(svg) {
+          max-width: 100%;
+          max-height: 100%;
+          width: auto;
+          height: auto;
+        }
+      }
+    }
+
+    &--sized {
+      .svg-preview__graphic :deep(svg) {
+        width: var(--preview-svg-width);
+        height: var(--preview-svg-height);
+        max-width: none;
+        max-height: none;
+      }
+    }
+  }
+
+  &__specimen {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: $spacing-sm;
+    max-width: 100%;
+
+    &--labeled {
+      padding: 0.35rem 0.75rem;
+      gap: 0.5rem;
+    }
+  }
+
+  &__graphic {
+    flex-shrink: 0;
+    line-height: 0;
+
+    :deep(svg) {
+      display: block;
+    }
+  }
+
+  &__sample-text {
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.2;
+    color: inherit;
+    white-space: nowrap;
+  }
+
+  &__content--sized &__sample-text {
+    font-size: max(0.75rem, calc(var(--preview-svg-height) * 0.58));
   }
 
   &__image {

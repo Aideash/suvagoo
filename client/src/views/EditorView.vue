@@ -514,7 +514,7 @@ function onPreviewUpdatePath(value: string) {
   <div class="editor-view">
     <header class="page-header">
       <div class="editor-view__header-left">
-        <button type="button" class="btn btn--secondary" @click="cancel">← Back</button>
+        <button type="button" class="btn btn--secondary" @click="cancel">← View</button>
         <input v-model="name" type="text" class="input editor-view__name" placeholder="SVG name" />
         <select
           v-model="collectionId"
