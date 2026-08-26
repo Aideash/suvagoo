@@ -208,7 +208,7 @@ onMounted(async () => {
                   type="button"
                   class="view-view__swatch view-view__swatch--checkered"
                   :class="{ 'view-view__swatch--selected': backdropMode === 'checkered' }"
-                  title="Checkered"
+                  title="Transparent"
                   :aria-pressed="backdropMode === 'checkered'"
                   @click="backdropMode = 'checkered'"
                 />

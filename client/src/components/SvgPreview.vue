@@ -106,7 +106,7 @@ const surfaceStyle = computed(() => {
   const style: Record<string, string> = {}
   if (props.color) style.color = props.color
   if (props.backdrop && props.backdrop !== 'checkered') {
-    style.background = props.backdrop
+    style['--preview-svg-background'] = props.backdrop
   }
   if (sized.value) {
     style['--preview-svg-width'] = `${sized.value.width}px`
@@ -772,6 +772,10 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
     height: 100%;
     padding: $spacing-md;
 
+    &:not(:has(.svg-preview__specimen)) {
+      background: var(--preview-svg-background);
+    }
+
     :deep(svg) {
       max-width: 100%;
       max-height: 100%;
@@ -844,6 +848,8 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
     justify-content: center;
     gap: $spacing-sm;
     max-width: 100%;
+    border-radius: calc(min(10px, var(--preview-svg-width) * 0.1));
+    background: var(--preview-svg-background);
 
     &--labeled {
       padding: 0.35rem 0.75rem;
