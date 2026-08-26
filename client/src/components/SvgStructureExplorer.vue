@@ -941,12 +941,14 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
   }
 
   &__tree-id {
-    color: var(--text-dim);
+    color: color-mix(in srgb, var(--text-dim), var(--accent));
     font-weight: 400;
   }
 
   &__tree-attr {
     color: var(--text-faint);
+    font-family: var(--font-family);
+
     &::before {
       content: '@';
       opacity: 0.6;

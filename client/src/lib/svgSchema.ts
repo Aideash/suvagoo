@@ -1036,8 +1036,43 @@ export function formatViewBoxValue(viewBox: ViewBox): string {
   return `${formatNumber(viewBox.minX)} ${formatNumber(viewBox.minY)} ${formatNumber(viewBox.width)} ${formatNumber(viewBox.height)}`
 }
 
+/**
+ * First `<svg>` open tag that is actually in the tree. A naïve search would
+ * pick up a commented-out sibling the author is keeping around while working
+ * on another fragment, and the preview would size itself to the dormant one.
+ */
+function firstLiveSvgOpenTag(content: string): string | null {
+  let i = 0
+  while (i < content.length) {
+    const lt = content.indexOf('<', i)
+    if (lt < 0) return null
+    i = lt
+
+    if (content.startsWith('<!--', i)) {
+      const end = content.indexOf('-->', i + 4)
+      i = end >= 0 ? end + 3 : content.length
+      continue
+    }
+    if (content.startsWith('<![CDATA[', i)) {
+      const end = content.indexOf(']]>', i + 9)
+      i = end >= 0 ? end + 3 : content.length
+      continue
+    }
+    if (content.startsWith('<?', i)) {
+      const end = content.indexOf('?>', i + 2)
+      i = end >= 0 ? end + 2 : content.length
+      continue
+    }
+
+    const match = /^<svg\b[^>]*>/i.exec(content.slice(i))
+    if (match) return match[0]
+    i += 1
+  }
+  return null
+}
+
 export function parseViewBoxFromContent(content: string): ViewBox {
-  const svgOpen = content.match(/<svg\b[^>]*>/i)?.[0]
+  const svgOpen = firstLiveSvgOpenTag(content)
   if (!svgOpen) return DEFAULT_VIEWBOX
 
   const viewBoxMatch = svgOpen.match(/\bviewBox\s*=\s*["']([^"']+)["']/i)
