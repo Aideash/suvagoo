@@ -1272,6 +1272,9 @@ export function defaultAttributeValue(
 
   const viewBoxValue = viewBoxValueForAttribute(name, viewBox, tag)
   if (viewBoxValue != null) return viewBoxValue
+  if (name === 'operator' && tag && normalizeTagName(tag) === 'femorphology') {
+    return 'erode'
+  }
   return DEFAULT_ATTR_VALUES[name] ?? '...'
 }
 

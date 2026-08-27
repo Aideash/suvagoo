@@ -296,6 +296,18 @@ const TRANSFER_FUNCTION_TYPES: readonly string[] = [
 
 const FE_FUNC_TAGS = new Set(['fefuncr', 'fefuncg', 'fefuncb', 'fefunca'])
 
+const COMPOSITE_OPERATORS: readonly string[] = [
+  'over',
+  'in',
+  'out',
+  'atop',
+  'xor',
+  'lighter',
+  'arithmetic',
+]
+
+const MORPHOLOGY_OPERATORS: readonly string[] = ['erode', 'dilate']
+
 export interface ParsedNumeric {
   number: number
   unit: string
@@ -350,6 +362,15 @@ export function getAttributeSchema(name: string, tagName?: string): AttributeSch
     }
     if (FE_FUNC_TAGS.has(tag)) {
       return { kind: 'enum', enumValues: TRANSFER_FUNCTION_TYPES }
+    }
+  }
+
+  if (normalized === 'operator') {
+    if (tag === 'fecomposite') {
+      return { kind: 'enum', enumValues: COMPOSITE_OPERATORS }
+    }
+    if (tag === 'femorphology') {
+      return { kind: 'enum', enumValues: MORPHOLOGY_OPERATORS }
     }
   }
 
