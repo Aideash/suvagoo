@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { numericRangeForAttribute } from '../lib/attributeSchema'
 import { viewBoxForAttribute } from '../lib/svgViewport'
+import { handleListboxKeydown, optionTabIndex } from '../composables/listboxNavigation'
 import {
   formatPointLabel,
   formatPoints,
@@ -234,7 +235,12 @@ function moveSelected(delta: -1 | 1) {
     </p>
 
     <template v-else-if="parsedPoints && parsedPoints.length > 0">
-      <div class="points-adjuster__chips" role="listbox" aria-label="Point coordinates">
+      <div
+        class="points-adjuster__chips"
+        role="listbox"
+        aria-label="Point coordinates"
+        @keydown="handleListboxKeydown($event, parsedPoints.length, selectedIndex, selectPoint)"
+      >
         <button
           v-for="(point, index) in parsedPoints"
           :key="index"
@@ -242,6 +248,7 @@ function moveSelected(delta: -1 | 1) {
           role="option"
           class="points-adjuster__chip"
           :class="{ 'points-adjuster__chip--selected': selectedIndex === index }"
+          :tabindex="optionTabIndex(index, selectedIndex)"
           :aria-selected="selectedIndex === index"
           @click="selectPoint(index)"
         >
@@ -251,13 +258,20 @@ function moveSelected(delta: -1 | 1) {
       </div>
 
       <div class="points-adjuster__ops">
-        <button type="button" class="points-adjuster__op-btn" title="Add point" @click="addPoint">
+        <button
+          type="button"
+          class="points-adjuster__op-btn"
+          title="Add point"
+          aria-label="Add point"
+          @click="addPoint"
+        >
           +
         </button>
         <button
           type="button"
           class="points-adjuster__op-btn"
           title="Remove selected point"
+          aria-label="Remove selected point"
           :disabled="selectedIndex == null || parsedPoints.length <= 1"
           @click="removeSelectedPoint"
         >
@@ -267,6 +281,7 @@ function moveSelected(delta: -1 | 1) {
           type="button"
           class="points-adjuster__op-btn"
           title="Move point earlier"
+          aria-label="Move point earlier"
           :disabled="selectedIndex == null || selectedIndex <= 0"
           @click="moveSelected(-1)"
         >
@@ -276,6 +291,7 @@ function moveSelected(delta: -1 | 1) {
           type="button"
           class="points-adjuster__op-btn"
           title="Move point later"
+          aria-label="Move point later"
           :disabled="selectedIndex == null || selectedIndex >= parsedPoints.length - 1"
           @click="moveSelected(1)"
         >

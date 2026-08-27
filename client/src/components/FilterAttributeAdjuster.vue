@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
+import { handleListboxKeydown, optionTabIndex } from '../composables/listboxNavigation'
+import { useFlyoutMenu } from '../composables/useFlyoutMenu'
 import {
   FILTER_AMOUNT_PERCENT_RANGE,
   FILTER_AMOUNT_RANGE,
@@ -50,7 +52,14 @@ const caret = ref(props.attribute.value.length)
 const textInput = ref<{ setCaret: (offset: number) => void }>()
 const isEditingText = ref(false)
 const selectedIndex = ref<number | null>(null)
-const showAddMenu = ref(false)
+const trigger = ref<HTMLButtonElement>()
+const panel = ref<HTMLElement>()
+const {
+  open: addMenuOpen,
+  menuId: addMenuId,
+  toggle: toggleAddMenu,
+  close: closeAddMenu,
+} = useFlyoutMenu(trigger, panel)
 
 const idSuggestions = computed(() =>
   suggestIdReferences(
@@ -230,7 +239,7 @@ watch(
     isEditingText.value = false
     textDraft.value = props.attribute.value
     selectedIndex.value = null
-    showAddMenu.value = false
+    closeAddMenu()
   },
   { immediate: true },
 )
@@ -338,7 +347,7 @@ function onAdd(type: FilterFunctionType) {
   )
   commitFunctions(next)
   selectFunction(nextIndex >= 0 ? nextIndex : null)
-  showAddMenu.value = false
+  closeAddMenu()
 }
 
 function removeSelected() {
@@ -385,7 +394,14 @@ function moveSelected(delta: -1 | 1) {
     </p>
 
     <template v-else-if="parsedFunctions && parsedFunctions.length > 0">
-      <div class="filter-adjuster__functions" role="listbox" aria-label="Filter functions">
+      <div
+        class="filter-adjuster__functions"
+        role="listbox"
+        aria-label="Filter functions"
+        @keydown="
+          handleListboxKeydown($event, parsedFunctions.length, selectedIndex, selectFunction)
+        "
+      >
         <button
           v-for="(fn, index) in parsedFunctions"
           :key="index"
@@ -393,6 +409,7 @@ function moveSelected(delta: -1 | 1) {
           role="option"
           class="filter-adjuster__fn"
           :class="{ 'filter-adjuster__fn--selected': selectedIndex === index }"
+          :tabindex="optionTabIndex(index, selectedIndex)"
           :aria-selected="selectedIndex === index"
           @click="selectFunction(index)"
         >
@@ -407,19 +424,32 @@ function moveSelected(delta: -1 | 1) {
       <div class="filter-adjuster__ops">
         <div class="filter-adjuster__add-wrap">
           <button
+            ref="trigger"
             type="button"
             class="filter-adjuster__op-btn"
             title="Add function"
+            aria-label="Add function"
+            aria-haspopup="menu"
             :disabled="addableFunctions.length === 0"
-            @click="showAddMenu = !showAddMenu"
+            :aria-expanded="addMenuOpen"
+            :aria-controls="addMenuOpen ? addMenuId : undefined"
+            @click="toggleAddMenu"
           >
             +
           </button>
-          <div v-if="showAddMenu" class="filter-adjuster__add-menu">
+          <div
+            v-if="addMenuOpen"
+            :id="addMenuId"
+            ref="panel"
+            class="filter-adjuster__add-menu"
+            role="menu"
+            aria-label="Add filter function"
+          >
             <button
               v-for="type in addableFunctions"
               :key="type"
               type="button"
+              role="menuitem"
               class="filter-adjuster__add-option"
               @click="onAdd(type)"
             >
@@ -432,6 +462,7 @@ function moveSelected(delta: -1 | 1) {
           type="button"
           class="filter-adjuster__op-btn"
           title="Remove selected function"
+          aria-label="Remove selected function"
           :disabled="selectedIndex == null"
           @click="removeSelected"
         >
@@ -441,6 +472,7 @@ function moveSelected(delta: -1 | 1) {
           type="button"
           class="filter-adjuster__op-btn"
           title="Move function earlier"
+          aria-label="Move function earlier"
           :disabled="selectedIndex == null || selectedIndex <= 0"
           @click="moveSelected(-1)"
         >
@@ -450,6 +482,7 @@ function moveSelected(delta: -1 | 1) {
           type="button"
           class="filter-adjuster__op-btn"
           title="Move function later"
+          aria-label="Move function later"
           :disabled="
             selectedIndex == null || !parsedFunctions || selectedIndex >= parsedFunctions.length - 1
           "
@@ -503,18 +536,31 @@ function moveSelected(delta: -1 | 1) {
       <div class="filter-adjuster__ops">
         <div class="filter-adjuster__add-wrap">
           <button
+            ref="trigger"
             type="button"
             class="filter-adjuster__op-btn"
             title="Add function"
-            @click="showAddMenu = !showAddMenu"
+            aria-label="Add function"
+            aria-haspopup="menu"
+            :aria-expanded="addMenuOpen"
+            :aria-controls="addMenuOpen ? addMenuId : undefined"
+            @click="toggleAddMenu"
           >
             +
           </button>
-          <div v-if="showAddMenu" class="filter-adjuster__add-menu">
+          <div
+            v-if="addMenuOpen"
+            :id="addMenuId"
+            ref="panel"
+            class="filter-adjuster__add-menu"
+            role="menu"
+            aria-label="Add filter function"
+          >
             <button
               v-for="type in addableFunctions"
               :key="type"
               type="button"
+              role="menuitem"
               class="filter-adjuster__add-option"
               @click="onAdd(type)"
             >
@@ -668,7 +714,8 @@ function moveSelected(delta: -1 | 1) {
     text-align: left;
     cursor: pointer;
 
-    &:hover {
+    &:hover,
+    &:focus-visible {
       background: color-mix(in srgb, $color-accent 10%, transparent);
     }
   }

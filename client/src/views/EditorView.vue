@@ -508,14 +508,29 @@ function onPreviewUpdatePath(value: string) {
   if (!attr) return
   onUpdateAttribute(attr.path, attr.attrName, value)
 }
+
+watch(
+  [name, isEditing],
+  () => {
+    document.title = isEditing.value ? `${name.value} — Suvagoo` : 'New SVG — Suvagoo'
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <div class="editor-view">
+    <h1 class="visually-hidden">{{ isEditing ? `Edit ${name}` : 'New SVG' }}</h1>
     <header class="page-header">
       <div class="editor-view__header-left">
         <button type="button" class="btn btn--secondary" @click="cancel">← View</button>
-        <input v-model="name" type="text" class="input editor-view__name" placeholder="SVG name" />
+        <input
+          v-model="name"
+          type="text"
+          class="input editor-view__name"
+          placeholder="SVG name"
+          aria-label="SVG name"
+        />
         <select
           v-model="collectionId"
           class="input editor-view__folder"
@@ -532,13 +547,13 @@ function onPreviewUpdatePath(value: string) {
       </div>
       <div class="page-header__actions">
         <div class="editor-view__autosave">
-          <span class="editor-view__autosave-label">Autosave</span>
+          <span id="autosave-label" class="editor-view__autosave-label">Autosave</span>
           <button
             type="button"
             class="editor-view__autosave-track"
             role="switch"
             :aria-checked="autosaveEnabled"
-            aria-label="Autosave"
+            aria-labelledby="autosave-label"
             :title="
               autosaveEnabled
                 ? 'Autosave on — click to save only manually'
@@ -574,12 +589,15 @@ function onPreviewUpdatePath(value: string) {
       </div>
     </header>
 
-    <p v-if="error" class="error-banner editor-view__error">{{ error }}</p>
-    <p v-if="builderError" class="error-banner editor-view__error">{{ builderError }}</p>
-    <p v-if="loading" class="editor-view__loading">Loading…</p>
+    <p v-if="error" class="error-banner editor-view__error" role="alert">{{ error }}</p>
+    <p v-if="builderError" class="error-banner editor-view__error" role="alert">
+      {{ builderError }}
+    </p>
+    <p v-if="loading" class="editor-view__loading" role="status">Loading…</p>
 
-    <div v-else class="editor-view__workspace">
+    <main v-else id="main-content" class="editor-view__workspace">
       <aside
+        id="structure-panel"
         class="editor-view__explorer"
         :class="{ 'editor-view__explorer--collapsed': !explorerOpen }"
       >
@@ -589,9 +607,12 @@ function onPreviewUpdatePath(value: string) {
             type="button"
             class="editor-view__explorer-toggle"
             :title="explorerOpen ? 'Collapse structure panel' : 'Expand structure panel'"
+            :aria-label="explorerOpen ? 'Collapse structure panel' : 'Expand structure panel'"
+            :aria-expanded="explorerOpen"
+            aria-controls="structure-panel"
             @click="explorerOpen = !explorerOpen"
           >
-            <span class="material-icons sm">
+            <span class="material-icons sm" aria-hidden="true">
               {{ explorerOpen ? 'chevron_left' : 'account_tree' }}
             </span>
           </button>
@@ -646,7 +667,7 @@ function onPreviewUpdatePath(value: string) {
           />
         </section>
       </div>
-    </div>
+    </main>
   </div>
 </template>
 

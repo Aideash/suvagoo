@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, useId } from 'vue'
 import { useFocusTrap } from '../composables/useFocusTrap'
 
 const props = withDefaults(
@@ -14,6 +14,7 @@ const props = withDefaults(
 const emit = defineEmits<{ close: [] }>()
 
 const panel = ref<HTMLDivElement>()
+const titleId = useId()
 
 function close() {
   emit('close')
@@ -46,13 +47,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true))
         class="modal-dialog"
         role="dialog"
         aria-modal="true"
-        :aria-label="props.title"
+        :aria-labelledby="titleId"
         :style="{ width: `${props.width}px` }"
       >
         <header class="modal-dialog__header">
-          <h2 class="modal-dialog__title">{{ props.title }}</h2>
-          <button type="button" class="modal-dialog__close" title="Close" @click="close">
-            <span class="material-icons sm">close</span>
+          <h2 :id="titleId" class="modal-dialog__title">{{ props.title }}</h2>
+          <button
+            type="button"
+            class="modal-dialog__close"
+            title="Close"
+            aria-label="Close"
+            @click="close"
+          >
+            <span class="material-icons sm" aria-hidden="true">close</span>
           </button>
         </header>
 

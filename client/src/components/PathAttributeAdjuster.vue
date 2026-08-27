@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { numericRangeForAttribute } from '../lib/attributeSchema'
 import { viewBoxForAttribute } from '../lib/svgViewport'
+import { handleListboxKeydown, optionTabIndex } from '../composables/listboxNavigation'
+import { useFlyoutMenu } from '../composables/useFlyoutMenu'
 import {
   ALL_ADDABLE_COMMANDS,
   createDefaultCommand,
@@ -40,7 +42,14 @@ const emit = defineEmits<{
 const textDraft = ref(props.attribute.value)
 const isEditingText = ref(false)
 const selectedIndex = ref<number | null>(null)
-const showAddMenu = ref(false)
+const trigger = ref<HTMLButtonElement>()
+const panel = ref<HTMLElement>()
+const {
+  open: addMenuOpen,
+  menuId: addMenuId,
+  toggle: toggleAddMenu,
+  close: closeAddMenu,
+} = useFlyoutMenu(trigger, panel)
 const showCompletion = ref(false)
 
 const viewBox = computed(() =>
@@ -166,7 +175,7 @@ watch(
     isEditingText.value = false
     textDraft.value = props.attribute.value
     selectedIndex.value = null
-    showAddMenu.value = false
+    closeAddMenu()
     showCompletion.value = false
     emit('selectCommand', null)
   },
@@ -268,6 +277,7 @@ function toggleSelectedRelative(event: MouseEvent) {
 
 function onToggleRelativeChip(index: number, event: MouseEvent) {
   event.stopPropagation()
+  selectCommand(index)
   const commands = parsedCommands.value
   if (!commands) return
   commitCommands(toggleRelative(commands, index))
@@ -281,7 +291,7 @@ function addCommand(type: PathCommandType) {
   const next = insertCommand(commands, insertAt, cmd)
   commitCommands(next)
   selectCommand(insertAt)
-  showAddMenu.value = false
+  closeAddMenu()
 }
 
 function removeSelectedCommand() {
@@ -352,49 +362,77 @@ function penLabel(index: number): string {
     </p>
 
     <template v-else-if="parsedCommands && parsedCommands.length > 0">
-      <div class="path-adjuster__commands" role="listbox" aria-label="Path commands">
-        <button
+      <div
+        class="path-adjuster__commands"
+        role="listbox"
+        aria-label="Path commands"
+        @keydown="handleListboxKeydown($event, parsedCommands.length, selectedIndex, selectCommand)"
+      >
+        <div
           v-for="(cmd, index) in parsedCommands"
           :key="index"
-          type="button"
           role="option"
           class="path-adjuster__cmd"
           :class="{ 'path-adjuster__cmd--selected': selectedIndex === index }"
+          :tabindex="optionTabIndex(index, selectedIndex)"
           :aria-selected="selectedIndex === index"
           @click="selectCommand(index)"
+          @focus="selectCommand(index)"
+          @keydown.enter.prevent.self="selectCommand(index)"
+          @keydown.space.prevent.self="selectCommand(index)"
         >
           <span class="path-adjuster__cmd-left">
             <span class="path-adjuster__cmd-letter">{{ formatCommandLetter(cmd) }}</span>
             <span class="path-adjuster__cmd-hint">{{ PATH_COMMAND_META[cmd.type].hint }}</span>
-            <button
-              v-if="cmd.type !== 'Z'"
-              type="button"
-              class="path-adjuster__rel-badge"
-              :title="cmd.relative ? 'Switch to absolute' : 'Switch to relative'"
-              @click="onToggleRelativeChip(index, $event)"
-            >
+            <span v-if="cmd.type !== 'Z'" class="path-adjuster__rel-spacer" aria-hidden="true">
               {{ cmd.relative ? 'relative' : 'absolute' }}
-            </button>
+              <span class="material-icons">swap_horiz</span>
+            </span>
           </span>
           <span class="path-adjuster__cmd-summary">{{ formatCommandSummary(cmd) }}</span>
-        </button>
+          <button
+            v-if="cmd.type !== 'Z'"
+            type="button"
+            class="path-adjuster__rel-badge"
+            :tabindex="selectedIndex === index ? 0 : -1"
+            :title="cmd.relative ? 'Switch to absolute' : 'Switch to relative'"
+            :aria-label="cmd.relative ? 'Switch to absolute' : 'Switch to relative'"
+            @click="onToggleRelativeChip(index, $event)"
+          >
+            {{ cmd.relative ? 'relative' : 'absolute' }}
+            <span class="material-icons" aria-hidden="true">swap_horiz</span>
+          </button>
+        </div>
       </div>
 
       <div class="path-adjuster__ops">
         <div class="path-adjuster__add-wrap">
           <button
+            ref="trigger"
             type="button"
             class="path-adjuster__op-btn"
             title="Add command"
-            @click="showAddMenu = !showAddMenu"
+            aria-label="Add command"
+            aria-haspopup="menu"
+            :aria-expanded="addMenuOpen"
+            :aria-controls="addMenuOpen ? addMenuId : undefined"
+            @click="toggleAddMenu"
           >
             +
           </button>
-          <div v-if="showAddMenu" class="path-adjuster__add-menu">
+          <div
+            v-if="addMenuOpen"
+            :id="addMenuId"
+            ref="panel"
+            class="path-adjuster__add-menu"
+            role="menu"
+            aria-label="Add path command"
+          >
             <button
               v-for="type in addableCommands"
               :key="type"
               type="button"
+              role="menuitem"
               class="path-adjuster__add-option"
               @click="addCommand(type)"
             >
@@ -407,6 +445,7 @@ function penLabel(index: number): string {
           type="button"
           class="path-adjuster__op-btn"
           title="Remove selected command"
+          aria-label="Remove selected command"
           :disabled="
             selectedIndex == null || (selectedIndex === 0 && parsedCommands[0]?.type === 'M')
           "
@@ -418,6 +457,7 @@ function penLabel(index: number): string {
           type="button"
           class="path-adjuster__op-btn"
           title="Move command earlier"
+          aria-label="Move command earlier"
           :disabled="
             selectedIndex == null ||
             selectedIndex <= 0 ||
@@ -431,6 +471,7 @@ function penLabel(index: number): string {
           type="button"
           class="path-adjuster__op-btn"
           title="Move command later"
+          aria-label="Move command later"
           :disabled="selectedIndex == null || selectedIndex >= parsedCommands.length - 1"
           @click="moveSelected(1)"
         >
@@ -441,9 +482,10 @@ function penLabel(index: number): string {
           type="button"
           class="path-adjuster__op-btn path-adjuster__op-btn--trailing"
           title="Complete path — retrace, reflect, or copy back"
+          aria-label="Complete path — retrace, reflect, or copy back"
           @click="showCompletion = true"
         >
-          <span class="material-icons sm">u_turn_left</span>
+          <span class="material-icons sm" aria-hidden="true">u_turn_left</span>
         </button>
       </div>
 
@@ -535,6 +577,7 @@ function penLabel(index: number): string {
   }
 
   &__cmd {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -582,10 +625,34 @@ function penLabel(index: number): string {
     line-height: 1.2;
   }
 
-  &__rel-badge {
+  &__rel-spacer {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     margin-top: 0.1rem;
-    padding: 0;
-    border: none;
+    padding: 0 3px 0 2px;
+    border: 1px solid transparent;
+    font-size: 0.5625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    line-height: 1.2;
+    visibility: hidden;
+
+    .material-icons {
+      font-size: 11px;
+    }
+  }
+
+  &__rel-badge {
+    position: absolute;
+    left: 0.5rem;
+    bottom: 0.35rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 3px 0 2px;
+    border: 1px solid transparent;
+    border-radius: 3px;
     background: none;
     font-size: 0.5625rem;
     text-transform: uppercase;
@@ -594,9 +661,17 @@ function penLabel(index: number): string {
     cursor: pointer;
     opacity: 0.75;
 
-    &:hover {
+    .material-icons {
+      font-size: 11px;
+    }
+
+    &:hover,
+    &:focus-visible {
       color: $color-accent;
       opacity: 1;
+      border-color: color-mix(in srgb, $color-accent 45%, transparent);
+      background: color-mix(in srgb, $color-accent 10%, transparent);
+      outline-offset: 0;
     }
   }
 
@@ -648,7 +723,8 @@ function penLabel(index: number): string {
     text-align: left;
     cursor: pointer;
 
-    &:hover {
+    &:hover,
+    &:focus-visible {
       background: color-mix(in srgb, $color-accent 10%, transparent);
     }
   }

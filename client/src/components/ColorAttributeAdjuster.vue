@@ -166,6 +166,7 @@ function applySuggestion(suggestion: ColorSuggestion) {
         type="color"
         class="color-adjuster__picker"
         :title="`Pick color for ${attribute.attrName}`"
+        :aria-label="`Pick color for ${attribute.attrName}`"
       />
       <ValueSuggestInput
         ref="textInput"

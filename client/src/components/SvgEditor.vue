@@ -280,9 +280,10 @@ onBeforeUnmount(() => {
         class="svg-editor__tool"
         :class="{ active: lineWrap }"
         :title="lineWrap ? 'Disable line wrap' : 'Enable line wrap'"
+        :aria-pressed="lineWrap"
         @click="toggleLineWrap"
       >
-        <span class="material-icons sm">wrap_text</span>
+        <span class="material-icons sm" aria-hidden="true">wrap_text</span>
         <span class="svg-editor__tool-label">{{ lineWrap ? 'Wrap on' : 'Wrap off' }}</span>
       </button>
       <span class="svg-editor__divider" />
@@ -293,7 +294,7 @@ onBeforeUnmount(() => {
         title="Format: one attribute per line, long values split"
         @click="applyFormat('pretty')"
       >
-        <span class="material-icons sm">unfold_more</span>
+        <span class="material-icons sm" aria-hidden="true">unfold_more</span>
         <span class="svg-editor__tool-label">Pretty</span>
       </button>
       <button
@@ -303,7 +304,7 @@ onBeforeUnmount(() => {
         title="Format: one element per line"
         @click="applyFormat('compact')"
       >
-        <span class="material-icons sm">unfold_less</span>
+        <span class="material-icons sm" aria-hidden="true">unfold_less</span>
         <span class="svg-editor__tool-label">Compact</span>
       </button>
       <button
@@ -315,9 +316,11 @@ onBeforeUnmount(() => {
           active: problemsOpen,
         }"
         :title="problemsOpen ? 'Hide the problem list' : 'Show the problem list'"
+        :aria-expanded="problemsOpen"
+        :aria-pressed="problemsOpen"
         @click="toggleProblems"
       >
-        <span class="material-icons sm">{{ problemIcon }}</span>
+        <span class="material-icons sm" aria-hidden="true">{{ problemIcon }}</span>
         <span class="svg-editor__tool-label">{{ problemLabel }}</span>
       </button>
       <span class="svg-editor__divider" />
@@ -334,6 +337,7 @@ onBeforeUnmount(() => {
               v-for="option in COPY_OPTIONS"
               :key="option.format"
               type="button"
+              role="menuitem"
               class="copy-option"
               :title="`${option.name} — ${option.hint}`"
               @click="(copy(option.format), close())"
@@ -349,9 +353,13 @@ onBeforeUnmount(() => {
         type="button"
         class="ghost svg-editor__preview-toggle"
         :title="showEditor ? 'Switch to editor mode' : 'Switch to preview mode'"
+        :aria-label="showEditor ? 'Switch to editor mode' : 'Switch to preview mode'"
+        :aria-expanded="showEditor"
         @click="showEditor = !showEditor"
       >
-        <span class="material-icons sm">{{ showEditor ? 'expand_less' : 'expand_more' }}</span>
+        <span class="material-icons sm" aria-hidden="true">{{
+          showEditor ? 'expand_less' : 'expand_more'
+        }}</span>
       </button>
     </div>
     <div ref="container" class="svg-editor__content" />
@@ -475,7 +483,8 @@ onBeforeUnmount(() => {
   border: 1px solid transparent;
   border-radius: var(--radius);
 
-  &:hover {
+  &:hover,
+  &:focus-visible {
     background: $color-surface-hover;
   }
 

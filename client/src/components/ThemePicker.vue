@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import PopMenu from './PopMenu.vue'
 import { useTheme } from '../composables/useTheme'
 import { getThemeById } from '../themes/definitions'
 
 const { preference, resolvedThemeId, themes, systemPreference, setPreference } = useTheme()
+const themeHeadingId = useId()
 
 const systemLabel = computed(() => {
   const active = getThemeById(resolvedThemeId.value)
@@ -25,12 +26,15 @@ function swatch(id: string) {
 <template>
   <PopMenu icon="settings" title="Settings" :width="272" align="right">
     <template #default="{ close }">
-      <div class="settings-menu">
-        <div class="menu-heading">Theme</div>
+      <div class="settings-menu" role="group" :aria-labelledby="themeHeadingId">
+        <div :id="themeHeadingId" class="menu-heading">Theme</div>
 
         <button
+          type="button"
+          role="menuitemradio"
           class="menu-option"
           :class="{ active: preference === systemPreference }"
+          :aria-checked="preference === systemPreference"
           @click="
             () => {
               setPreference(systemPreference)
@@ -38,21 +42,31 @@ function swatch(id: string) {
             }
           "
         >
-          <span class="material-icons sm menu-option__glyph">brightness_auto</span>
+          <span class="material-icons sm menu-option__glyph" aria-hidden="true"
+            >brightness_auto</span
+          >
           <span class="menu-option__text">
             <span class="menu-option__name">System default</span>
             <span class="menu-option__hint">{{ systemLabel }}</span>
           </span>
-          <span v-if="preference === systemPreference" class="material-icons sm tick">check</span>
+          <span
+            v-if="preference === systemPreference"
+            class="material-icons sm tick"
+            aria-hidden="true"
+            >check</span
+          >
         </button>
 
-        <div class="menu-rule" />
+        <div class="menu-rule" role="separator" />
 
         <button
           v-for="theme in themes"
           :key="theme.id"
+          type="button"
+          role="menuitemradio"
           class="menu-option"
           :class="{ active: preference === theme.id }"
+          :aria-checked="preference === theme.id"
           @click="
             () => {
               setPreference(theme.id)
@@ -60,12 +74,14 @@ function swatch(id: string) {
             }
           "
         >
-          <span class="menu-option__swatch" :style="swatch(theme.id)">Aa</span>
+          <span class="menu-option__swatch" :style="swatch(theme.id)" aria-hidden="true">Aa</span>
           <span class="menu-option__text">
             <span class="menu-option__name">{{ theme.name }}</span>
             <span class="menu-option__hint">{{ theme.description }}</span>
           </span>
-          <span v-if="preference === theme.id" class="material-icons sm tick">check</span>
+          <span v-if="preference === theme.id" class="material-icons sm tick" aria-hidden="true"
+            >check</span
+          >
         </button>
       </div>
     </template>
@@ -99,7 +115,8 @@ function swatch(id: string) {
   border-radius: var(--radius);
 }
 
-.menu-option:hover:not(:disabled) {
+.menu-option:hover:not(:disabled),
+.menu-option:focus-visible {
   background: var(--bg-hover);
   border-color: transparent;
 }

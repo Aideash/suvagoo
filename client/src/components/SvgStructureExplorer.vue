@@ -377,17 +377,21 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
     }"
   >
     <div class="svg-explorer__toolbar">
-      <input
-        v-model="filter"
-        class="input svg-explorer__filter"
-        type="search"
-        :placeholder="
-          deleteMode
-            ? 'Filter existing elements and attributes…'
-            : 'Filter elements and attributes…'
-        "
-        :disabled="!context && !flatTree.length"
-      />
+      <div class="search-field">
+        <span class="material-icons sm search-field__icon" aria-hidden="true">search</span>
+        <input
+          v-model="filter"
+          class="input svg-explorer__filter"
+          type="search"
+          aria-label="Filter elements and attributes"
+          :placeholder="
+            deleteMode
+              ? 'Filter existing elements and attributes…'
+              : 'Filter elements and attributes…'
+          "
+          :disabled="!context && !flatTree.length"
+        />
+      </div>
       <div class="svg-explorer__mode">
         <span class="svg-explorer__mode-label">Explorer mode</span>
         <div class="svg-explorer__mode-options" role="group" aria-label="Explorer mode">
@@ -452,6 +456,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
                 active: isActivePath(row.node.path),
                 selected: isMultiSelected(row.node.path) && explorerMode === 'insert',
               }"
+              :aria-current="isActivePath(row.node.path) ? 'true' : undefined"
               :title="`Select ${formatElementPath(row.node.path)}`"
               @click="onTreeActivate(row.node.path, $event)"
               @keydown.enter.prevent="onTreeActivate(row.node.path, $event)"
@@ -743,7 +748,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
 
     &:focus-visible {
       outline: 2px solid $color-accent;
-      outline-offset: 1px;
+      outline-offset: -2px;
     }
 
     &.active {
@@ -760,6 +765,10 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
   &__filter {
     width: 100%;
     font-size: 0.8125rem;
+
+    &:focus-visible {
+      outline-offset: -2px;
+    }
   }
 
   &__body {

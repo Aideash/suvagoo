@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { getAttributeSchema } from '../lib/attributeSchema'
+import { handleListboxKeydown, optionTabIndex } from '../composables/listboxNavigation'
 import {
   dashRole,
   formatDashArray,
@@ -75,6 +76,14 @@ const previewSegments = computed(() => {
     }
   })
 })
+
+function previewTabIndex(segmentIndex: number): number {
+  const selected = selectedIndex.value ?? 0
+  return previewSegments.value.findIndex((segment) => segment.entryIndex === selected) ===
+    segmentIndex
+    ? 0
+    : -1
+}
 
 watch(
   () => props.attribute.value,
@@ -225,9 +234,14 @@ function moveSelected(delta: -1 | 1) {
     </p>
 
     <template v-else-if="entries.length > 0">
-      <div class="dash-adjuster__preview" role="listbox" aria-label="Dash pattern preview">
+      <div
+        class="dash-adjuster__preview"
+        role="listbox"
+        aria-label="Dash pattern preview"
+        @keydown="handleListboxKeydown($event, entries.length, selectedIndex, selectEntry)"
+      >
         <button
-          v-for="segment in previewSegments"
+          v-for="(segment, segmentIndex) in previewSegments"
           :key="segment.key"
           type="button"
           role="option"
@@ -241,6 +255,7 @@ function moveSelected(delta: -1 | 1) {
             'dash-adjuster__preview-segment--selected': selectedIndex === segment.entryIndex,
           }"
           :style="{ flexGrow: segment.weight }"
+          :tabindex="previewTabIndex(segmentIndex)"
           :aria-selected="selectedIndex === segment.entryIndex"
           :aria-label="`${segment.role}, ${formatDashEntry(segment.entry)}${segment.cycle > 0 ? ', repeated cycle' : ''}`"
           :title="`${segment.role}: ${formatDashEntry(segment.entry)}`"
@@ -248,7 +263,12 @@ function moveSelected(delta: -1 | 1) {
         ></button>
       </div>
 
-      <div class="dash-adjuster__chips" role="listbox" aria-label="Dash pattern entries">
+      <div
+        class="dash-adjuster__chips"
+        role="listbox"
+        aria-label="Dash pattern entries"
+        @keydown="handleListboxKeydown($event, entries.length, selectedIndex, selectEntry)"
+      >
         <button
           v-for="(entry, index) in entries"
           :key="index"
@@ -260,6 +280,7 @@ function moveSelected(delta: -1 | 1) {
             'dash-adjuster__chip--space': dashRole(index) === 'space',
             'dash-adjuster__chip--selected': selectedIndex === index,
           }"
+          :tabindex="optionTabIndex(index, selectedIndex)"
           :aria-selected="selectedIndex === index"
           @click="selectEntry(index)"
         >
@@ -270,13 +291,20 @@ function moveSelected(delta: -1 | 1) {
       </div>
 
       <div class="dash-adjuster__ops">
-        <button type="button" class="dash-adjuster__op-btn" title="Add entry" @click="addEntry">
+        <button
+          type="button"
+          class="dash-adjuster__op-btn"
+          title="Add entry"
+          aria-label="Add entry"
+          @click="addEntry"
+        >
           +
         </button>
         <button
           type="button"
           class="dash-adjuster__op-btn"
           title="Remove selected entry"
+          aria-label="Remove selected entry"
           :disabled="selectedIndex == null || entries.length <= 1"
           @click="removeSelected"
         >
@@ -286,6 +314,7 @@ function moveSelected(delta: -1 | 1) {
           type="button"
           class="dash-adjuster__op-btn"
           title="Move entry earlier"
+          aria-label="Move entry earlier"
           :disabled="selectedIndex == null || selectedIndex <= 0"
           @click="moveSelected(-1)"
         >
@@ -295,6 +324,7 @@ function moveSelected(delta: -1 | 1) {
           type="button"
           class="dash-adjuster__op-btn"
           title="Move entry later"
+          aria-label="Move entry later"
           :disabled="selectedIndex == null || selectedIndex >= entries.length - 1"
           @click="moveSelected(1)"
         >
@@ -325,7 +355,13 @@ function moveSelected(delta: -1 | 1) {
 
     <div v-else class="dash-adjuster__empty">
       <p class="dash-adjuster__empty-note">No dashes (solid line).</p>
-      <button type="button" class="dash-adjuster__op-btn" title="Add dashes" @click="seedEntries">
+      <button
+        type="button"
+        class="dash-adjuster__op-btn"
+        title="Add dashes"
+        aria-label="Add dashes"
+        @click="seedEntries"
+      >
         Add dashes
       </button>
     </div>

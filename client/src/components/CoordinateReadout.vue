@@ -89,7 +89,7 @@ defineExpose({ capture })
 
 <template>
   <div class="coord-readout">
-    <div v-if="cursor" class="coord-readout__cursor" aria-live="polite">
+    <div v-if="cursor" class="coord-readout__cursor" aria-hidden="true">
       {{ formatCoordinate(cursor.x) }}, {{ formatCoordinate(cursor.y) }}
     </div>
 
@@ -119,7 +119,7 @@ defineExpose({ capture })
             aria-label="Remove coordinate"
             @click.stop="remove(index)"
           >
-            <span class="material-icons">remove</span>
+            <span class="material-icons" aria-hidden="true">remove</span>
           </button>
           <span>{{ formatCoordinate(point.x) }}, {{ formatCoordinate(point.y) }}</span>
         </div>

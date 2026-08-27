@@ -170,6 +170,14 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+watch(
+  () => svg.value?.name,
+  (svgName) => {
+    document.title = svgName ? `${svgName} — Suvagoo` : 'View SVG — Suvagoo'
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -192,9 +200,9 @@ onMounted(async () => {
       </div>
     </header>
 
-    <main class="view-view__content">
-      <p v-if="loading" class="empty-state">Loading…</p>
-      <p v-else-if="error" class="error-banner">{{ error }}</p>
+    <main id="main-content" class="view-view__content">
+      <p v-if="loading" class="empty-state" role="status">Loading…</p>
+      <p v-else-if="error" class="error-banner" role="alert">{{ error }}</p>
 
       <template v-else-if="svg">
         <p class="view-view__meta">Updated {{ formatDate(svg.updatedAt) }}</p>
@@ -209,6 +217,7 @@ onMounted(async () => {
                   class="view-view__swatch view-view__swatch--checkered"
                   :class="{ 'view-view__swatch--selected': backdropMode === 'checkered' }"
                   title="Transparent"
+                  aria-label="Transparent background"
                   :aria-pressed="backdropMode === 'checkered'"
                   @click="backdropMode = 'checkered'"
                 />
@@ -217,6 +226,7 @@ onMounted(async () => {
                   class="view-view__swatch view-view__swatch--white"
                   :class="{ 'view-view__swatch--selected': backdropMode === 'white' }"
                   title="White"
+                  aria-label="White background"
                   :aria-pressed="backdropMode === 'white'"
                   @click="backdropMode = 'white'"
                 />
@@ -225,6 +235,7 @@ onMounted(async () => {
                   class="view-view__swatch view-view__swatch--black"
                   :class="{ 'view-view__swatch--selected': backdropMode === 'black' }"
                   title="Black"
+                  aria-label="Black background"
                   :aria-pressed="backdropMode === 'black'"
                   @click="backdropMode = 'black'"
                 />

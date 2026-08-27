@@ -38,6 +38,7 @@ function formatDate(iso: string): string {
     <RouterLink
       :to="{ name: 'view', params: { id: svg.id } }"
       class="svg-card__preview-link"
+      :aria-label="`Preview of ${svg.name}`"
       @mouseenter="loadPreview(svg.id)"
       @focusin="loadPreview(svg.id)"
     >
@@ -87,6 +88,11 @@ function formatDate(iso: string): string {
     height: 160px;
     color: inherit;
     text-decoration: none;
+    border-radius: 14px 14px 0 0;
+
+    &:focus-visible {
+      outline-offset: -2px;
+    }
   }
 
   &__body {

@@ -7,7 +7,7 @@ defineProps<{
 </script>
 
 <template>
-  <span class="material-icons id-option__icon">tag</span>
+  <span class="material-icons id-option__icon" aria-hidden="true">tag</span>
   <span class="id-option__name">{{ id }}</span>
   <span class="id-option__tag">{{ tag }}</span>
 </template>

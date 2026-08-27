@@ -454,18 +454,21 @@ function addClickedPoint() {
             type="button"
             class="svg-preview__playback-btn"
             :title="playing ? 'Pause animation' : 'Play animation'"
-            :aria-pressed="!playing"
+            :aria-label="playing ? 'Pause animation' : 'Play animation'"
             @click="togglePlayback"
           >
-            <span class="material-icons">{{ playing ? 'pause' : 'play_arrow' }}</span>
+            <span class="material-icons" aria-hidden="true">{{
+              playing ? 'pause' : 'play_arrow'
+            }}</span>
           </button>
           <button
             type="button"
             class="svg-preview__playback-btn"
             title="Restart animation"
+            aria-label="Restart animation"
             @click="restartAnimation"
           >
-            <span class="material-icons">replay</span>
+            <span class="material-icons" aria-hidden="true">replay</span>
           </button>
         </div>
 
@@ -484,18 +487,22 @@ function addClickedPoint() {
               :class="{ 'svg-preview__mode--active': mode === option }"
               :aria-pressed="mode === option"
               :title="MODE_LABELS[option].description"
+              :aria-label="MODE_LABELS[option].description"
               @click="mode = option"
             >
-              <span class="material-icons">{{ MODE_LABELS[option].icon }}</span>
+              <span class="material-icons" aria-hidden="true">{{ MODE_LABELS[option].icon }}</span>
             </button>
           </div>
           <button
             type="button"
             class="ghost fullscreen-button"
             :title="fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'"
+            :aria-label="fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'"
             @click="toggleFullscreen"
           >
-            <span class="material-icons">{{ fullscreen ? 'fullscreen_exit' : 'fullscreen' }}</span>
+            <span class="material-icons" aria-hidden="true">{{
+              fullscreen ? 'fullscreen_exit' : 'fullscreen'
+            }}</span>
           </button>
         </div>
 
@@ -528,7 +535,7 @@ function addClickedPoint() {
           title="Show this resource on its own to edit its handles"
           @click="mode = 'isolated'"
         >
-          <span class="material-icons sm">center_focus_strong</span>
+          <span class="material-icons sm" aria-hidden="true">center_focus_strong</span>
           Handles live in the isolated preview
         </button>
 
@@ -582,6 +589,7 @@ function addClickedPoint() {
               type="button"
               class="ghost svg-preview__zoom-badge"
               title="Reset zoom"
+              aria-label="Reset zoom"
               @click.stop="resetView"
               @pointerdown.stop
             >
@@ -658,7 +666,6 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
       var(--bg-hover) 0% 50%
     )
     50% / 20px 20px;
-  border-radius: $radius-md;
   overflow: hidden;
   color: $color-text;
 
@@ -1007,6 +1014,12 @@ $tick-color: color-mix(in srgb, $color-text-muted 45%, transparent);
       color: $color-accent;
       background: color-mix(in srgb, $color-accent 16%, var(--bg-raised));
     }
+  }
+
+  &__mode:focus-visible,
+  &__playback-btn:focus-visible,
+  .fullscreen-button:focus-visible {
+    outline-offset: -2px;
   }
 
   &__handles-hint {

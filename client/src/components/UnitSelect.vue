@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId } from 'vue'
+import { moveFocusAroundTrigger } from '../composables/menuNavigation'
 
 const props = defineProps<{
   /** Selectable units in display order; '' is the unitless option. */
@@ -19,6 +20,7 @@ const open = ref(false)
 const trigger = ref<HTMLButtonElement>()
 const menu = ref<HTMLElement>()
 const menuStyle = ref<Record<string, string>>({})
+const listboxId = useId()
 
 /** Keep an unrecognised unit listed so the user can switch away from it. */
 const unitOptions = computed(() =>
@@ -80,8 +82,71 @@ function onPointerDown(event: MouseEvent) {
   close()
 }
 
+function optionButtons(): HTMLButtonElement[] {
+  if (!menu.value) return []
+  return [...menu.value.querySelectorAll<HTMLButtonElement>('[role="option"]:not([disabled])')]
+}
+
+function focusOption(index: number) {
+  const list = optionButtons()
+  if (!list.length) return
+  list[(index + list.length) % list.length]?.focus()
+}
+
+function eventInSelect(event: Event): boolean {
+  const target = event.target
+  return (
+    target instanceof Node &&
+    (trigger.value === target ||
+      Boolean(trigger.value?.contains(target)) ||
+      Boolean(menu.value?.contains(target)))
+  )
+}
+
 function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') close(true)
+  if (!open.value) {
+    if (!eventInSelect(event)) return
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    event.preventDefault()
+    toggle()
+    return
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    close(true)
+    return
+  }
+
+  if (event.key === 'Tab') {
+    event.preventDefault()
+    const btn = trigger.value
+    if (btn) moveFocusAroundTrigger(btn, menu.value, event.shiftKey ? 'backward' : 'forward')
+    close(false)
+    return
+  }
+
+  if (!eventInSelect(event)) return
+
+  const list = optionButtons()
+  if (!list.length) return
+
+  const active = document.activeElement
+  const current = active instanceof HTMLButtonElement ? list.indexOf(active) : -1
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    focusOption(current === -1 ? 0 : current + 1)
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    focusOption(current === -1 ? list.length - 1 : current - 1)
+  } else if (event.key === 'Home') {
+    event.preventDefault()
+    list[0]?.focus()
+  } else if (event.key === 'End') {
+    event.preventDefault()
+    list[list.length - 1]?.focus()
+  }
 }
 
 function onScroll(event: Event) {
@@ -117,18 +182,28 @@ onBeforeUnmount(() => {
       type="button"
       class="unit-select__trigger"
       :title="label ? `Unit for ${label}` : 'Unit'"
+      :aria-label="label ? `Unit for ${label}` : 'Unit'"
       aria-haspopup="listbox"
       :aria-expanded="open"
+      :aria-controls="open ? listboxId : undefined"
       @click="toggle"
     >
       <span class="unit-select__value">{{ modelValue }}</span>
-      <span class="material-icons unit-select__caret">{{
+      <span class="material-icons unit-select__caret" aria-hidden="true">{{
         open ? 'expand_less' : 'expand_more'
       }}</span>
     </button>
 
     <Teleport to="body">
-      <div v-if="open" ref="menu" class="unit-select__menu" role="listbox" :style="menuStyle">
+      <div
+        v-if="open"
+        :id="listboxId"
+        ref="menu"
+        class="unit-select__menu"
+        role="listbox"
+        :aria-label="label ? `Unit for ${label}` : 'Unit'"
+        :style="menuStyle"
+      >
         <button
           v-for="option in unitOptions"
           :key="option"
@@ -137,6 +212,7 @@ onBeforeUnmount(() => {
           class="unit-select__option"
           :class="{ 'unit-select__option--active': option === modelValue }"
           :aria-selected="option === modelValue"
+          :tabindex="option === modelValue ? 0 : -1"
           @click="select(option)"
         >
           {{ option || 'none' }}
@@ -168,6 +244,7 @@ onBeforeUnmount(() => {
     cursor: pointer;
 
     &:hover,
+    &:focus-visible,
     &[aria-expanded='true'] {
       background: $color-surface-hover;
 
@@ -210,7 +287,8 @@ onBeforeUnmount(() => {
     text-align: left;
     cursor: pointer;
 
-    &:hover {
+    &:hover,
+    &:focus-visible {
       background: $color-surface-hover;
     }
 

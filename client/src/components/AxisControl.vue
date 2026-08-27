@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { parseNumericValue } from '../lib/attributeSchema'
 import UnitSelect from './UnitSelect.vue'
 
@@ -18,6 +18,8 @@ const props = withDefaults(
   }>(),
   { label: '', fixedMin: undefined, units: () => [''], unit: '' },
 )
+
+const labelId = useId()
 
 const emit = defineEmits<{
   update: [value: number, unit: string]
@@ -200,8 +202,8 @@ function normalizeRange() {
 </script>
 
 <template>
-  <div class="axis-control">
-    <span v-if="label" class="axis-control__label">{{ label }}</span>
+  <div class="axis-control" role="group" :aria-labelledby="label ? labelId : undefined">
+    <span v-if="label" :id="labelId" class="axis-control__label">{{ label }}</span>
     <input
       v-model.number="slider"
       type="range"
@@ -209,15 +211,24 @@ function normalizeRange() {
       :min="effectiveRange.min"
       :max="effectiveRange.max"
       :step="effectiveRange.step"
+      :aria-label="label ? `${label} slider` : 'Value slider'"
     />
     <div class="axis-control__stepper">
-      <button type="button" class="axis-control__step-btn" @click="nudge(-1)">−</button>
+      <button
+        type="button"
+        class="axis-control__step-btn"
+        :aria-label="label ? `Decrease ${label}` : 'Decrease'"
+        @click="nudge(-1)"
+      >
+        −
+      </button>
       <span class="axis-control__field">
         <input
           :value="textDraft"
           type="text"
           class="input axis-control__number"
           :class="{ 'axis-control__number--with-unit': hasUnitAffix }"
+          :aria-label="label ? `${label} value` : 'Value'"
           @input="onTextInput"
           @keydown.alt.enter.exact="roundToNearestStep"
           @keydown.enter.exact="onTextEnter"
@@ -233,7 +244,14 @@ function normalizeRange() {
           />
         </span>
       </span>
-      <button type="button" class="axis-control__step-btn" @click="nudge(1)">+</button>
+      <button
+        type="button"
+        class="axis-control__step-btn"
+        :aria-label="label ? `Increase ${label}` : 'Increase'"
+        @click="nudge(1)"
+      >
+        +
+      </button>
     </div>
     <div
       class="axis-control__range-fields"

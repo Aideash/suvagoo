@@ -200,7 +200,7 @@ onMounted(loadData)
           aria-label="New folder"
           @click="handleCreateFolder"
         >
-          <span class="material-icons sm">create_new_folder</span>
+          <span class="material-icons sm" aria-hidden="true">create_new_folder</span>
         </button>
         <button
           type="button"
@@ -210,7 +210,7 @@ onMounted(loadData)
           :disabled="!selectedCollection"
           @click="handleRenameFolder"
         >
-          <span class="material-icons sm">drive_file_rename_outline</span>
+          <span class="material-icons sm" aria-hidden="true">drive_file_rename_outline</span>
         </button>
         <button
           type="button"
@@ -220,15 +220,18 @@ onMounted(loadData)
           :disabled="!selectedCollection"
           @click="handleDeleteFolder"
         >
-          <span class="material-icons sm">folder_delete</span>
+          <span class="material-icons sm" aria-hidden="true">folder_delete</span>
         </button>
-        <input
-          v-model="searchQuery"
-          class="input list-view__search"
-          type="search"
-          placeholder="Search SVGs…"
-          aria-label="Search SVGs"
-        />
+        <div class="search-field list-view__search">
+          <span class="material-icons sm search-field__icon" aria-hidden="true">search</span>
+          <input
+            v-model="searchQuery"
+            class="input"
+            type="search"
+            placeholder="Search SVGs…"
+            aria-label="Search SVGs"
+          />
+        </div>
       </div>
       <div class="page-header__actions">
         <RouterLink :to="newSvgTo" class="btn btn--primary">New SVG</RouterLink>
@@ -236,9 +239,9 @@ onMounted(loadData)
       </div>
     </header>
 
-    <main class="page-content">
-      <p v-if="loading" class="empty-state">Loading…</p>
-      <p v-else-if="error" class="error-banner">{{ error }}</p>
+    <main id="main-content" class="page-content">
+      <p v-if="loading" class="empty-state" role="status">Loading…</p>
+      <p v-else-if="error" class="error-banner" role="alert">{{ error }}</p>
 
       <div v-else-if="svgs.length === 0" class="empty-state">
         <p>No SVGs yet. Create your first one!</p>
