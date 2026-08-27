@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { formatColor, parseColor, parseColorAlpha, parseColorToHex } from '../lib/attributeSchema'
 import { COLOR_KEYWORDS, suggestColorValues } from '../lib/cssColorNames'
 import { suggestIdReferences, type DocumentId } from '../lib/idReferences'
@@ -29,6 +29,7 @@ interface ColorSuggestion {
   caret: number | null
 }
 
+const fieldId = useId()
 const draft = ref(props.attribute.value)
 const caret = ref(props.attribute.value.length)
 const textInput = ref<{ setCaret: (offset: number) => void }>()
@@ -162,6 +163,7 @@ function applySuggestion(suggestion: ColorSuggestion) {
 
     <div class="color-adjuster__row">
       <input
+        :id="`${fieldId}-picker`"
         v-model="colorHex"
         type="color"
         class="color-adjuster__picker"
@@ -192,9 +194,10 @@ function applySuggestion(suggestion: ColorSuggestion) {
       </ValueSuggestInput>
     </div>
 
-    <label v-if="showColorAlpha" class="color-adjuster__alpha-row">
+    <label v-if="showColorAlpha" class="color-adjuster__alpha-row" :for="`${fieldId}-alpha`">
       <span class="color-adjuster__alpha-label">Alpha</span>
       <input
+        :id="`${fieldId}-alpha`"
         v-model.number="colorAlpha"
         type="range"
         class="color-adjuster__slider"
@@ -203,6 +206,7 @@ function applySuggestion(suggestion: ColorSuggestion) {
         step="0.01"
       />
       <input
+        :id="`${fieldId}-alpha-percent`"
         v-model.number="colorAlphaPercent"
         type="number"
         class="input color-adjuster__alpha-number"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
 import {
   formatPreserveAspectRatio,
@@ -25,6 +25,7 @@ const DEFAULT_PARSED: PreserveAspectRatio = {
 
 const align = ref<PreserveAspectRatioAlign>(DEFAULT_PARSED.align)
 const meetOrSlice = ref<MeetOrSlice | null>(DEFAULT_PARSED.meetOrSlice)
+const fieldId = useId()
 
 const parseError = computed(() => {
   const trimmed = props.attribute.value.trim()
@@ -82,6 +83,7 @@ function toggleMeetOrSlice(option: MeetOrSlice) {
     </p>
 
     <select
+      :id="fieldId"
       class="input par-adjuster__select"
       :value="align"
       :aria-label="`${attribute.attrName} align`"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, useId, watch } from 'vue'
 import {
   formatNumericValue,
   getAttributeSchema,
@@ -25,6 +25,7 @@ const emit = defineEmits<{
 }>()
 
 const SCALAR_KINDS = new Set<AttributeKind>(['length', 'number', 'opacity', 'percentage'])
+const fieldId = useId()
 const drafts = reactive<Record<string, string>>({})
 const editingName = ref<string | null>(null)
 const { activeKey, startScrub, consumeSuppressedClick } = useNumericScrub()
@@ -143,6 +144,7 @@ function onTextEscape(event: KeyboardEvent, name: string) {
           <span>{{ row.name }}</span>
         </button>
         <input
+          :id="`${fieldId}-${row.name}`"
           :value="drafts[row.name] ?? row.value"
           type="text"
           class="input numeric-scrub__input"

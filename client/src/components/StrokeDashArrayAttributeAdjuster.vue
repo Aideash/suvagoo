@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { getAttributeSchema } from '../lib/attributeSchema'
 import { handleListboxKeydown, optionTabIndex } from '../composables/listboxNavigation'
 import {
@@ -28,6 +28,7 @@ const emit = defineEmits<{
 const textDraft = ref(props.attribute.value)
 const isEditingText = ref(false)
 const selectedIndex = ref<number | null>(null)
+const fieldId = useId()
 
 const units = computed(() => getAttributeSchema(props.attribute.attrName).units ?? [''])
 
@@ -217,6 +218,7 @@ function moveSelected(delta: -1 | 1) {
 <template>
   <div class="dash-adjuster">
     <input
+      :id="fieldId"
       :value="textDraft"
       type="text"
       class="input dash-adjuster__text"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import {
   EXPLORER_COMMON_LIMIT,
   formatPathSegment,
@@ -58,6 +58,7 @@ const emit = defineEmits<{
 const { isPreFilled, toggleSnippetMode } = useSnippetMode()
 
 const filter = ref('')
+const fieldId = useId()
 const explorerMode = ref<'insert' | 'delete'>('insert')
 const deleteMode = computed(() => explorerMode.value === 'delete')
 const showAllAttributes = ref(false)
@@ -380,6 +381,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       <div class="search-field">
         <span class="material-icons sm search-field__icon" aria-hidden="true">search</span>
         <input
+          :id="fieldId"
           v-model="filter"
           class="input svg-explorer__filter"
           type="search"

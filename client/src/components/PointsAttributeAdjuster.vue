@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { numericRangeForAttribute } from '../lib/attributeSchema'
 import { viewBoxForAttribute } from '../lib/svgViewport'
 import { handleListboxKeydown, optionTabIndex } from '../composables/listboxNavigation'
@@ -30,6 +30,7 @@ const emit = defineEmits<{
 const textDraft = ref(props.attribute.value)
 const isEditingText = ref(false)
 const selectedIndex = ref<number | null>(null)
+const fieldId = useId()
 
 const viewBox = computed(() =>
   viewBoxForAttribute(props.content, props.attribute.path, props.attribute.attrName),
@@ -219,6 +220,7 @@ function moveSelected(delta: -1 | 1) {
 <template>
   <div class="points-adjuster">
     <input
+      :id="fieldId"
       :value="textDraft"
       type="text"
       class="input points-adjuster__text"

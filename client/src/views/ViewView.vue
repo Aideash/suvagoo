@@ -242,10 +242,13 @@ watch(
                 <label
                   class="view-view__swatch view-view__swatch--custom"
                   :class="{ 'view-view__swatch--selected': backdropMode === 'custom' }"
+                  for="custom-backdrop"
                   title="Custom"
                   @click="backdropMode = 'custom'"
                 >
                   <input
+                    id="custom-backdrop"
+                    name="custom-backdrop"
                     type="color"
                     :value="customBackdrop"
                     aria-label="Custom background color"
@@ -259,6 +262,8 @@ watch(
               <span class="view-view__label">Color</span>
               <div class="view-view__color">
                 <input
+                  id="preview-color"
+                  name="preview-color"
                   type="color"
                   class="view-view__picker"
                   :value="parseColorToHex(previewColor) ?? customColor"
@@ -289,8 +294,10 @@ watch(
                 />
 
                 <template v-if="sizePreset !== 'full'">
-                  <label class="view-view__toggle">
+                  <label class="view-view__toggle" for="separate-dimensions">
                     <input
+                      id="separate-dimensions"
+                      name="separate-dimensions"
                       type="checkbox"
                       :checked="separateDimensions"
                       @change="onSeparateChange"
@@ -301,10 +308,13 @@ watch(
                   <label class="view-view__slider-row">
                     <span>{{ separateDimensions ? 'Width' : 'Size' }}</span>
                     <input
+                      id="preview-width-range"
+                      name="preview-width-range"
                       type="range"
                       :min="SIZE_SLIDER_MIN"
                       :max="SIZE_SLIDER_MAX"
                       :value="separateDimensions ? width : size"
+                      :aria-label="separateDimensions ? 'Width' : 'Size'"
                       @input="
                         separateDimensions
                           ? setWidth(numberFromEvent($event))
@@ -312,11 +322,14 @@ watch(
                       "
                     />
                     <input
+                      id="preview-width"
+                      name="preview-width"
                       type="number"
                       class="input view-view__size-number"
                       min="1"
                       :max="SIZE_INPUT_MAX"
                       :value="separateDimensions ? width : size"
+                      :aria-label="separateDimensions ? 'Width in pixels' : 'Size in pixels'"
                       @change="
                         separateDimensions
                           ? setWidth(numberFromEvent($event))
@@ -329,18 +342,24 @@ watch(
                   <label v-if="separateDimensions" class="view-view__slider-row">
                     <span>Height</span>
                     <input
+                      id="preview-height-range"
+                      name="preview-height-range"
                       type="range"
                       :min="SIZE_SLIDER_MIN"
                       :max="SIZE_SLIDER_MAX"
                       :value="height"
+                      aria-label="Height"
                       @input="setHeight(numberFromEvent($event))"
                     />
                     <input
+                      id="preview-height"
+                      name="preview-height"
                       type="number"
                       class="input view-view__size-number"
                       min="1"
                       :max="SIZE_INPUT_MAX"
                       :value="height"
+                      aria-label="Height in pixels"
                       @change="setHeight(numberFromEvent($event))"
                     />
                     <span class="view-view__unit">px</span>
@@ -352,12 +371,19 @@ watch(
             <div class="view-view__field view-view__field--sample">
               <span class="view-view__label">Sample text</span>
               <div class="view-view__sample">
-                <label class="view-view__toggle">
-                  <input v-model="showSampleText" type="checkbox" />
+                <label class="view-view__toggle" for="show-sample-text">
+                  <input
+                    id="show-sample-text"
+                    name="show-sample-text"
+                    v-model="showSampleText"
+                    type="checkbox"
+                  />
                   <span>Show beside the SVG</span>
                 </label>
                 <input
                   v-if="showSampleText"
+                  id="sample-text"
+                  name="sample-text"
                   v-model="sampleText"
                   type="text"
                   class="input view-view__sample-input"

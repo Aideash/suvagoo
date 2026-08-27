@@ -53,6 +53,7 @@ const draft = ref(props.attribute.value)
 const caret = ref(props.attribute.value.length)
 const textInput = ref<{ setCaret: (offset: number) => void }>()
 const idWarnId = useId()
+const fieldId = useId()
 
 /**
  * On an animation element, `from`/`to`/`by` hold values of whatever attribute
@@ -294,7 +295,13 @@ function setEnumValue(value: string) {
     </div>
 
     <div v-else-if="schema.kind === 'enum'" class="attr-adjuster__controls">
-      <select class="input attr-adjuster__select" :value="draft" @change="onEnumChange">
+      <select
+        :id="fieldId"
+        class="input attr-adjuster__select"
+        :value="draft"
+        :aria-label="attribute.attrName"
+        @change="onEnumChange"
+      >
         <option v-if="!schema.enumValues?.includes(draft)" :value="draft">
           {{ draft }} (custom)
         </option>
@@ -306,19 +313,23 @@ function setEnumValue(value: string) {
 
     <div v-else-if="schema.kind === 'opacity'" class="attr-adjuster__controls">
       <input
+        :id="`${fieldId}-slider`"
         v-model.number="opacitySlider"
         type="range"
         class="attr-adjuster__slider"
         min="0"
         max="1"
         step="0.05"
+        :aria-label="`${attribute.attrName} slider`"
       />
       <div class="attr-adjuster__stepper">
         <button type="button" class="attr-adjuster__step-btn" @click="nudge(-1)">−</button>
         <input
+          :id="`${fieldId}-value`"
           v-model="draft"
           type="text"
           class="input attr-adjuster__number"
+          :aria-label="`${attribute.attrName} value`"
           @change="commitDraft"
           @keydown.enter="commitDraft"
           @keydown.escape="onDraftEscape"
@@ -329,19 +340,23 @@ function setEnumValue(value: string) {
 
     <div v-else-if="schema.kind === 'percentage'" class="attr-adjuster__controls">
       <input
+        :id="`${fieldId}-slider`"
         v-model.number="percentageSlider"
         type="range"
         class="attr-adjuster__slider"
         :min="effectiveRange.min"
         :max="effectiveRange.max"
         :step="effectiveRange.step"
+        :aria-label="`${attribute.attrName} slider`"
       />
       <div class="attr-adjuster__stepper">
         <button type="button" class="attr-adjuster__step-btn" @click="nudge(-1)">−</button>
         <input
+          :id="`${fieldId}-value`"
           v-model="draft"
           type="text"
           class="input attr-adjuster__number"
+          :aria-label="`${attribute.attrName} value`"
           @change="commitDraft"
           @keydown.enter="commitDraft"
           @keydown.escape="onDraftEscape"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { numericRangeForAttribute } from '../lib/attributeSchema'
 import { describeBakePlan } from '../lib/bakeTransform'
 import { getViewBox, type PathSegment } from '../lib/svgDocument'
@@ -25,6 +25,7 @@ const emit = defineEmits<{
 }>()
 
 const uniformScale = ref(true)
+const fieldId = useId()
 
 const viewBox = computed(() => getViewBox(props.content))
 
@@ -146,8 +147,8 @@ function uniqueTags(tags: string[]): string {
         @update="(v) => patch({ cy: v })"
       />
       <div class="bulk-transform__scale-lock">
-        <label class="bulk-transform__lock">
-          <input type="checkbox" :checked="uniformScale" @change="onUniformToggle" />
+        <label class="bulk-transform__lock" :for="fieldId">
+          <input :id="fieldId" type="checkbox" :checked="uniformScale" @change="onUniformToggle" />
           Uniform scale
         </label>
       </div>

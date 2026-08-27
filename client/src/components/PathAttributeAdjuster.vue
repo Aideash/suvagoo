@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { numericRangeForAttribute } from '../lib/attributeSchema'
 import { viewBoxForAttribute } from '../lib/svgViewport'
 import { handleListboxKeydown, optionTabIndex } from '../composables/listboxNavigation'
@@ -42,6 +42,7 @@ const emit = defineEmits<{
 const textDraft = ref(props.attribute.value)
 const isEditingText = ref(false)
 const selectedIndex = ref<number | null>(null)
+const fieldId = useId()
 const trigger = ref<HTMLButtonElement>()
 const panel = ref<HTMLElement>()
 const {
@@ -346,6 +347,7 @@ function penLabel(index: number): string {
 <template>
   <div class="path-adjuster">
     <input
+      :id="fieldId"
       :value="textDraft"
       type="text"
       class="input path-adjuster__text"
@@ -504,8 +506,11 @@ function penLabel(index: number): string {
             @update="updateFieldValue(field.valueIndex, $event)"
           />
           <div v-else class="path-adjuster__scalar-field">
-            <label class="path-adjuster__scalar-label">{{ field.label }}</label>
+            <label class="path-adjuster__scalar-label" :for="`${fieldId}-${field.valueIndex}`">{{
+              field.label
+            }}</label>
             <input
+              :id="`${fieldId}-${field.valueIndex}`"
               :value="field.value"
               type="number"
               class="input path-adjuster__scalar-input"

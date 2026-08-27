@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { formatNumericValue, numericRangeForAttribute } from '../lib/attributeSchema'
 import { viewBoxForAttribute } from '../lib/svgViewport'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
@@ -38,6 +38,7 @@ const emit = defineEmits<{
 const textDraft = ref(props.attribute.value)
 const isEditingText = ref(false)
 const selectedIndex = ref<number | null>(null)
+const fieldId = useId()
 const trigger = ref<HTMLButtonElement>()
 const panel = ref<HTMLElement>()
 const {
@@ -295,6 +296,7 @@ function formatMatrixCell(n: number): string {
 <template>
   <div class="transform-adjuster">
     <input
+      :id="fieldId"
       :value="textDraft"
       type="text"
       class="input transform-adjuster__text"

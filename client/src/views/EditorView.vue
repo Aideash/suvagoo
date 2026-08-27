@@ -525,6 +525,8 @@ watch(
       <div class="editor-view__header-left">
         <button type="button" class="btn btn--secondary" @click="cancel">← View</button>
         <input
+          id="svg-name"
+          name="svg-name"
           v-model="name"
           type="text"
           class="input editor-view__name"
@@ -532,6 +534,8 @@ watch(
           aria-label="SVG name"
         />
         <select
+          id="svg-folder"
+          name="svg-folder"
           v-model="collectionId"
           class="input editor-view__folder"
           aria-label="Folder"

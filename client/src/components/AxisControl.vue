@@ -20,6 +20,7 @@ const props = withDefaults(
 )
 
 const labelId = useId()
+const fieldId = useId()
 
 const emit = defineEmits<{
   update: [value: number, unit: string]
@@ -205,6 +206,7 @@ function normalizeRange() {
   <div class="axis-control" role="group" :aria-labelledby="label ? labelId : undefined">
     <span v-if="label" :id="labelId" class="axis-control__label">{{ label }}</span>
     <input
+      :id="`${fieldId}-slider`"
       v-model.number="slider"
       type="range"
       class="axis-control__slider"
@@ -224,6 +226,7 @@ function normalizeRange() {
       </button>
       <span class="axis-control__field">
         <input
+          :id="`${fieldId}-value`"
           :value="textDraft"
           type="text"
           class="input axis-control__number"
@@ -257,9 +260,10 @@ function normalizeRange() {
       class="axis-control__range-fields"
       :class="{ 'axis-control__range-fields--no-min': !showMinField }"
     >
-      <label v-if="showMinField" class="axis-control__range-field">
+      <label v-if="showMinField" class="axis-control__range-field" :for="`${fieldId}-min`">
         <span>min</span>
         <input
+          :id="`${fieldId}-min`"
           v-model.number="rangeMin"
           type="number"
           class="input axis-control__range-input"
@@ -270,9 +274,10 @@ function normalizeRange() {
           @keydown.alt.arrow-down.exact.prevent="shiftDown('rangeMin')"
         />
       </label>
-      <label class="axis-control__range-field">
+      <label class="axis-control__range-field" :for="`${fieldId}-max`">
         <span>max</span>
         <input
+          :id="`${fieldId}-max`"
           v-model.number="rangeMax"
           type="number"
           class="input axis-control__range-input"
@@ -283,9 +288,10 @@ function normalizeRange() {
           @keydown.alt.arrow-down.exact.prevent="shiftDown('rangeMax')"
         />
       </label>
-      <label class="axis-control__range-field">
+      <label class="axis-control__range-field" :for="`${fieldId}-step`">
         <span>step</span>
         <input
+          :id="`${fieldId}-step`"
           v-model.number="rangeStep"
           type="number"
           class="input axis-control__range-input"

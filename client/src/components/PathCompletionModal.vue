@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { numericRangeForAttribute } from '../lib/attributeSchema'
 import {
   absoluteEndpoints,
@@ -48,6 +48,7 @@ const mode = ref<CompletionMode>('retrace')
 const connector = ref<ConnectorStyle>('none')
 const traceAll = ref(true)
 const stepCount = ref(1)
+const fieldId = useId()
 const width = ref(0)
 const flip = ref(false)
 const close = ref(true)
@@ -164,13 +165,14 @@ function onApply() {
       <fieldset class="path-completion__group">
         <legend class="path-completion__legend">Trace back</legend>
         <div class="path-completion__row">
-          <label class="path-completion__check">
-            <input v-model="traceAll" type="checkbox" />
+          <label class="path-completion__check" :for="`${fieldId}-trace-all`">
+            <input :id="`${fieldId}-trace-all`" v-model="traceAll" type="checkbox" />
             <span>All {{ maxSteps }} commands</span>
           </label>
-          <label v-if="!traceAll" class="path-completion__steps">
+          <label v-if="!traceAll" class="path-completion__steps" :for="`${fieldId}-steps`">
             <span>Steps</span>
             <input
+              :id="`${fieldId}-steps`"
               v-model.number="stepCount"
               type="number"
               class="input path-completion__number"
@@ -219,8 +221,8 @@ function onApply() {
         </button>
       </fieldset>
 
-      <label class="path-completion__check">
-        <input v-model="close" type="checkbox" />
+      <label class="path-completion__check" :for="`${fieldId}-close`">
+        <input :id="`${fieldId}-close`" v-model="close" type="checkbox" />
         <span>Close the shape</span>
       </label>
 

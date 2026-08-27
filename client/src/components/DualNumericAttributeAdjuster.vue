@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { dualNumericRangeForAttribute, getAttributeSchema } from '../lib/attributeSchema'
 import { viewBoxForAttribute } from '../lib/svgViewport'
 import { formatDualNumeric, parseDualNumeric, type DualNumeric } from '../lib/dualNumericAttribute'
@@ -18,6 +18,8 @@ const props = defineProps<{
   attribute: AttributeContext
   content: string
 }>()
+
+const fieldId = useId()
 
 const emit = defineEmits<{
   update: [value: string]
@@ -184,8 +186,13 @@ function selectLens(id: DualLensId) {
     </div>
 
     <template v-if="activeLens === 'axes'">
-      <label class="dual-numeric-adjuster__toggle">
-        <input type="checkbox" :checked="separateValues" @change="onSeparateChange" />
+      <label class="dual-numeric-adjuster__toggle" :for="fieldId">
+        <input
+          :id="fieldId"
+          type="checkbox"
+          :checked="separateValues"
+          @change="onSeparateChange"
+        />
         <span>Separate {{ labels.primary }} / {{ labels.secondary }} values</span>
       </label>
 

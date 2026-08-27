@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { REPEAT_COUNT_RANGE } from '../lib/attributeSchema'
 import { INDEFINITE, isIndefinite, parseRepeatCount } from '../lib/animationAttribute'
 import type { AttributeContext } from '../lib/svgDocument'
@@ -16,6 +16,7 @@ const emit = defineEmits<{
 
 const DEFAULT_COUNT = 3
 
+const fieldId = useId()
 const draft = ref(props.attribute.value)
 /** Remembered so toggling away from Indefinite and back restores the count. */
 const lastCount = ref(parseRepeatCount(props.attribute.value) ?? DEFAULT_COUNT)
@@ -81,6 +82,7 @@ function onEscape(event: KeyboardEvent) {
 
     <input
       v-else
+      :id="fieldId"
       v-model="draft"
       type="text"
       class="input repeat-count__text"

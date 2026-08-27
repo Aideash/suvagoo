@@ -183,6 +183,8 @@ onMounted(loadData)
       <h1>Suvagoo</h1>
       <div class="list-view__filters">
         <select
+          id="folder-filter"
+          name="folder-filter"
           v-model="collectionFilter"
           class="input list-view__folder"
           aria-label="Filter by folder"
@@ -225,6 +227,8 @@ onMounted(loadData)
         <div class="search-field list-view__search">
           <span class="material-icons sm search-field__icon" aria-hidden="true">search</span>
           <input
+            id="svg-search"
+            name="svg-search"
             v-model="searchQuery"
             class="input"
             type="search"

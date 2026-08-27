@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import AxisControl from './AxisControl.vue'
 
 export type NumericGroupField = {
@@ -40,6 +40,7 @@ const emit = defineEmits<{
   update: [fieldId: string, value: number]
 }>()
 
+const fieldId = useId()
 const selectedId = ref(props.fields[0]?.id ?? '')
 const sharedDefaults = ref<NumericGroupRange>({ ...props.defaultRange })
 
@@ -154,10 +155,12 @@ function rowIndexForField(index: number): number {
         <label
           class="numeric-group__cell"
           :class="{ 'numeric-group__cell--selected': selectedId === field.id }"
+          :for="`${fieldId}-${field.id}`"
           @click="selectField(field.id)"
         >
           <span v-if="!showHeaders" class="numeric-group__label">{{ field.label }}</span>
           <input
+            :id="`${fieldId}-${field.id}`"
             :value="displayValue(values[index] ?? 0)"
             type="number"
             class="input numeric-group__input"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { viewBoxFieldRange, type ViewBoxField } from '../lib/attributeSchema'
 import { attributeIdentity, type AttributeContext } from '../lib/svgDocument'
 import {
@@ -18,6 +18,7 @@ const emit = defineEmits<{
   update: [value: string]
 }>()
 
+const fieldId = useId()
 const minX = ref(DEFAULT_VIEWBOX.minX)
 const minY = ref(DEFAULT_VIEWBOX.minY)
 const width = ref(DEFAULT_VIEWBOX.width)
@@ -147,10 +148,12 @@ function commitSelected(value: number) {
         :key="field.key"
         class="viewbox-adjuster__cell"
         :class="{ 'viewbox-adjuster__cell--selected': selectedField === field.key }"
+        :for="`${fieldId}-${field.key}`"
         @click="selectedField = field.key"
       >
         <span class="viewbox-adjuster__label">{{ field.label }}</span>
         <input
+          :id="`${fieldId}-${field.key}`"
           :value="currentViewBox()[field.key]"
           type="number"
           class="input viewbox-adjuster__input"

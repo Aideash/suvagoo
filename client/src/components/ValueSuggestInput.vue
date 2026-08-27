@@ -22,6 +22,7 @@ const emit = defineEmits<{
 }>()
 
 const listboxId = useId()
+const inputId = useId()
 const inputEl = ref<HTMLInputElement>()
 const listbox = ref<HTMLElement>()
 const listboxOpen = ref(false)
@@ -168,6 +169,7 @@ defineExpose({
 <template>
   <input
     ref="inputEl"
+    :id="inputId"
     v-bind="$attrs"
     :value="modelValue"
     type="text"
