@@ -4,7 +4,7 @@ import {
   parseIndexedDocument,
   type IndexedDocumentNode,
 } from './svgDocument'
-import { parseViewBoxFromContent, type ViewBox } from './svgSchema'
+import { parseViewBoxFromContent, isTextNodeTag, type ViewBox } from './svgSchema'
 
 const RESOURCE_TAGS: Record<string, string> = {
   lineargradient: 'linearGradient',
@@ -45,6 +45,7 @@ function collectDefsNodes(root: IndexedDocumentNode): IndexedDocumentNode[] {
   const result: IndexedDocumentNode[] = []
 
   function visit(node: IndexedDocumentNode) {
+    if (isTextNodeTag(node.tag)) return
     if (node.tag === 'defs') result.push(node)
     node.children.forEach(visit)
   }
@@ -223,7 +224,7 @@ export function buildDefsPreview(content: string, cursorOffset: number): DefsPre
   const nodes =
     selectedNode && selectedNode.path.length === defsPath.length + 1
       ? [selectedNode]
-      : activeDefs.children
+      : activeDefs.children.filter((node) => !isTextNodeTag(node.tag))
 
   return {
     mode: selectedNode ? 'resource' : 'gallery',

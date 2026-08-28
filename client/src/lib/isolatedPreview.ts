@@ -5,7 +5,7 @@ import {
   type IndexedDocumentNode,
   type PathSegment,
 } from './svgDocument'
-import { formatViewBoxValue, type ViewBox } from './svgSchema'
+import { formatViewBoxValue, isTextNodeTag, type ViewBox } from './svgSchema'
 import { contentViewportForPath, isolatableAncestorPath } from './svgViewport'
 import type { Point2D } from './pointsAttribute'
 
@@ -47,6 +47,7 @@ function documentDefs(content: string, root: IndexedDocumentNode): string {
   const blocks: string[] = []
 
   function visit(node: IndexedDocumentNode) {
+    if (isTextNodeTag(node.tag)) return
     if (node.tag === 'defs') {
       blocks.push(content.slice(node.openTagStart, node.closeTagEnd ?? node.openTagEnd))
       return

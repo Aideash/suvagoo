@@ -46,6 +46,24 @@ const UNITLESS: readonly string[] = ['']
 
 const CSS_LENGTH_UNITS: readonly string[] = ['', 'px', '%', 'em', 'rem', 'pt', 'cm', 'mm', 'in']
 
+/**
+ * `<textPath startOffset>` is a length along the path: user units, a percent of
+ * the path length, or any SVG length unit.
+ */
+const START_OFFSET_UNITS: readonly string[] = [
+  '',
+  '%',
+  'px',
+  'em',
+  'ex',
+  'rem',
+  'pt',
+  'pc',
+  'cm',
+  'mm',
+  'in',
+]
+
 const COLOR_ATTRS = new Set([
   'fill',
   'stroke',
@@ -63,7 +81,7 @@ const OPACITY_ATTRS = new Set([
   'flood-opacity',
 ])
 
-const PERCENTAGE_ATTRS = new Set(['offset', 'startOffset'])
+const PERCENTAGE_ATTRS = new Set(['offset'])
 
 const LENGTH_ATTRS = new Set([
   'x',
@@ -384,6 +402,9 @@ export function getAttributeSchema(name: string, tagName?: string): AttributeSch
   if (enumSchema) {
     return enumSchema
   }
+  if (normalized === 'startoffset') {
+    return { kind: 'length', step: 1, units: START_OFFSET_UNITS }
+  }
   if (PERCENTAGE_ATTRS.has(normalized)) {
     return { kind: 'percentage', min: 0, max: 100, step: 1 }
   }
@@ -519,6 +540,10 @@ export function numericRangeForAttribute(
     case 'dx':
     case 'dy':
       return { min: -span, max: span, step: baseStep }
+    case 'startoffset':
+      // Unitless values are a distance along the path; the viewBox span is a
+      // stand-in for path length when the referenced path is not measured.
+      return { min: 0, max: span, step: baseStep }
     case 'z':
     case 'pointsatx':
     case 'pointsaty':

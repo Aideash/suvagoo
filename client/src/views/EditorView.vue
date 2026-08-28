@@ -16,6 +16,7 @@ import {
   insertChildElement,
   remapPathsAfterDelete,
   updateAttribute,
+  updateTextNode,
   type AttributeContext,
   type PathSegment,
 } from '../lib/svgDocument'
@@ -479,6 +480,16 @@ function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
   editorRef.value?.applyChange(result.content, result.cursor)
 }
 
+function onUpdateTextNode(path: PathSegment[], value: string) {
+  builderError.value = ''
+  const result = updateTextNode(content.value, path, value)
+  if (!result) {
+    builderError.value = 'Could not update text.'
+    return
+  }
+  editorRef.value?.applyChange(result.content, result.cursor)
+}
+
 function onPreviewStateChange(state: {
   attribute: AttributeContext | null
   selectedPointIndex: number | null
@@ -636,6 +647,7 @@ watch(
           @delete-child="onDeleteChild"
           @delete-attribute="onDeleteAttribute"
           @update-attribute="onUpdateAttribute"
+          @update-text-node="onUpdateTextNode"
           @update:transform-session="onTransformSessionUpdate"
           @transform-commit="onTransformCommit"
           @transform-cancel="onTransformCancel"

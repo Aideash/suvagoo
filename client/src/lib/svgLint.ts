@@ -2,9 +2,11 @@ import { xmlLanguage } from '@codemirror/lang-xml'
 import type { SyntaxNode, Tree } from '@lezer/common'
 import {
   ANIMATION_ELEMENTS,
+  DESCRIPTIVE_ELEMENTS,
   FILTER_PRIMITIVE_ELEMENTS,
   getElementSchema,
   isAnimationTag,
+  isDescriptiveTag,
 } from './svgSchema'
 
 export type SvgLintSeverity = 'error' | 'warning'
@@ -23,21 +25,16 @@ const MAX_PROBLEMS = 200
 
 /**
  * Valid SVG elements the builder schema leaves out because they hold no
- * geometry to edit. Without them the linter would call `<title>` unknown.
+ * geometry to edit. Without them the linter would call `<metadata>` unknown.
  */
-const EXTRA_SVG_TAGS = [
-  'title',
-  'desc',
-  'metadata',
-  'style',
-  'script',
-  'switch',
-  'a',
-  'view',
-] as const
+const EXTRA_SVG_TAGS = ['metadata', 'style', 'script', 'switch', 'a', 'view'] as const
 
 /** Elements that may sit under any parent, so the nesting rules skip them. */
-const ANYWHERE_TAGS = new Set<string>([...EXTRA_SVG_TAGS, ...ANIMATION_ELEMENTS])
+const ANYWHERE_TAGS = new Set<string>([
+  ...EXTRA_SVG_TAGS,
+  ...ANIMATION_ELEMENTS,
+  ...DESCRIPTIVE_ELEMENTS,
+])
 
 const LIGHT_SOURCE_PARENTS = ['feDiffuseLighting', 'feSpecularLighting'] as const
 
@@ -482,7 +479,8 @@ function allowedAttributes(tag: string): Set<string> | null {
   const schema = getElementSchema(tag)
   if (!schema) return null
 
-  const painted = !isAnimationTag(tag) && tag !== 'filter' && !tag.startsWith('fe')
+  const painted =
+    !isAnimationTag(tag) && !isDescriptiveTag(tag) && tag !== 'filter' && !tag.startsWith('fe')
   const allowed = new Set<string>([
     ...schema.attributes,
     ...CORE_ATTRIBUTES,

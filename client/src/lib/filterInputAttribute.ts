@@ -5,7 +5,7 @@ import {
   type IndexedDocumentNode,
   type PathSegment,
 } from './svgDocument'
-import { getElementSchema } from './svgSchema'
+import { getElementSchema, isTextNodeTag } from './svgSchema'
 
 export const STANDARD_FILTER_INPUTS = [
   'SourceGraphic',
@@ -59,6 +59,7 @@ export function collectFilterInputOptions(
   const results: FilterInputOption[] = []
 
   for (const primitive of filter.children) {
+    if (isTextNodeTag(primitive.tag)) continue
     if (pathsEqual(primitive.path, currentPrimitivePath)) break
     addResultOption(primitive, seen, results)
   }

@@ -5,6 +5,8 @@ import {
   formatPathSegment,
   getElementSchema,
   isAnimationTag,
+  isDescriptiveTag,
+  isTextNodeTag,
   uniqueSorted,
 } from '../lib/svgSchema'
 import {
@@ -21,6 +23,7 @@ import {
   type PathSegment,
 } from '../lib/svgDocument'
 import SvgAttributeAdjuster from './SvgAttributeAdjuster.vue'
+import SvgTextNodeAdjuster from './SvgTextNodeAdjuster.vue'
 import BulkTransformPanel from './BulkTransformPanel.vue'
 import NumericAttributeScrubPanel from './NumericAttributeScrubPanel.vue'
 import { useSnippetMode } from '../composables/useSnippetMode'
@@ -42,6 +45,7 @@ const emit = defineEmits<{
   deleteChild: [path: PathSegment[]]
   deleteAttribute: [name: string]
   updateAttribute: [path: PathSegment[], name: string, value: string]
+  updateTextNode: [path: PathSegment[], value: string]
   'update:transformSession': [session: TransformSessionValues]
   transformCommit: []
   transformCancel: []
@@ -134,13 +138,17 @@ function matchesNeedle(label: string): boolean {
   return label.toLowerCase().includes(needle.value)
 }
 
+function isStructuralChildTag(tag: string): boolean {
+  return !isAnimationTag(tag) && !isDescriptiveTag(tag) && !isTextNodeTag(tag)
+}
+
 /**
- * Animation elements are offered by almost every schema, and they sort ahead of
- * the structural children, so they get their own row rather than filling the
- * common slots on every container.
+ * Animation and description elements are offered by almost every schema, and
+ * they sort ahead of the structural children, so they get their own rows rather
+ * than filling the common slots on every container.
  */
 const structuralChildren = computed(() =>
-  uniqueSorted((schema.value?.children ?? []).filter((tag) => !isAnimationTag(tag))),
+  uniqueSorted((schema.value?.children ?? []).filter(isStructuralChildTag)),
 )
 
 const visibleInsertChildren = computed(() => {
@@ -158,6 +166,31 @@ const animationChildren = computed(() =>
   uniqueSorted(
     (schema.value?.children ?? []).filter((tag) => isAnimationTag(tag) && matchesNeedle(tag)),
   ),
+)
+
+const descriptiveChildren = computed(() =>
+  uniqueSorted(
+    (schema.value?.children ?? []).filter((tag) => isDescriptiveTag(tag) && matchesNeedle(tag)),
+  ),
+)
+
+const canInsertTextNode = computed(() => {
+  const allowed = schema.value?.children.some(isTextNodeTag)
+  if (!allowed || !matchesNeedle('text_node')) return false
+  const children = selectedNode.value?.children ?? []
+  const hasText = children.some((child) => isTextNodeTag(child.tag))
+  if (!hasText) return true
+  if (context.value && isDescriptiveTag(context.value.tagName)) return false
+  return children.some((child) => !isTextNodeTag(child.tag))
+})
+
+const hasInsertableChildren = computed(
+  () =>
+    visibleInsertChildren.value.length > 0 ||
+    hiddenInsertChildCount.value > 0 ||
+    animationChildren.value.length > 0 ||
+    descriptiveChildren.value.length > 0 ||
+    canInsertTextNode.value,
 )
 
 const commonAttributes = computed(() => {
@@ -188,6 +221,11 @@ const hiddenInsertAttributeCount = computed(() => {
 })
 
 function childLabel(node: IndexedDocumentNode): string {
+  if (isTextNodeTag(node.tag)) {
+    const preview = (node.text ?? '').replace(/\s+/g, ' ').trim()
+    if (!preview) return 'text_node'
+    return preview.length > 24 ? `${preview.slice(0, 23)}…` : preview
+  }
   const segment = node.path.at(-1)
   if (!segment) return node.tag
   return formatPathSegment(segment)
@@ -205,6 +243,7 @@ function elementId(node: IndexedDocumentNode): string | null {
 }
 
 function treeAttributeNames(node: IndexedDocumentNode): string[] {
+  if (isTextNodeTag(node.tag)) return []
   return Object.keys(node.attributes)
     .filter((name) => !isIdAttribute(name))
     .slice(0, 3)
@@ -269,14 +308,18 @@ function treeIndexForPath(path: PathSegment[]): number {
 
 function onTreeActivate(path: PathSegment[], event: MouseEvent | KeyboardEvent) {
   const index = treeIndexForPath(path)
+  const textNode = isTextNodeTag(path.at(-1)?.tag ?? '')
 
-  if (explorerMode.value === 'insert') {
+  if (explorerMode.value === 'insert' && !textNode) {
     const meta = event.metaKey || event.ctrlKey
 
     if (event.shiftKey && selectionAnchorIndex.value != null && index >= 0) {
       const from = Math.min(selectionAnchorIndex.value, index)
       const to = Math.max(selectionAnchorIndex.value, index)
-      const range = flatTree.value.slice(from, to + 1).map((row) => row.node.path)
+      const range = flatTree.value
+        .slice(from, to + 1)
+        .map((row) => row.node.path)
+        .filter((candidate) => !isTextNodeTag(candidate.at(-1)?.tag ?? ''))
       emit('selectionChange', range)
       emit('selectElement', path)
       return
@@ -365,6 +408,11 @@ function onAttributeUpdate(value: string) {
   emit('updateAttribute', activeAttribute.value.path, activeAttribute.value.attrName, value)
 }
 
+function onTextNodeUpdate(value: string) {
+  if (!selectedNode.value || !isTextNodeTag(selectedNode.value.tag)) return
+  emit('updateTextNode', selectedNode.value.path, value)
+}
+
 function onScrubUpdate(path: PathSegment[], name: string, value: string) {
   emit('updateAttribute', path, name, value)
 }
@@ -431,7 +479,10 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
           {{ deleteMode ? 'Selected' : 'At cursor' }}
         </h3>
         <p class="svg-explorer__target">
-          <code>&lt;{{ context.tagName }}&gt;</code>
+          <code v-if="isTextNodeTag(context.tagName) && selectedNode">{{
+            childLabel(selectedNode)
+          }}</code>
+          <code v-else>&lt;{{ context.tagName }}&gt;</code>
         </p>
         <p class="svg-explorer__path">{{ formatElementPath(context.path) }}</p>
       </section>
@@ -465,9 +516,14 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
               @keydown.space.prevent="onTreeActivate(row.node.path, $event)"
             >
               <span class="svg-explorer__tree-label">
-                <span class="svg-explorer__tree-tag">{{ childLabel(row.node) }}</span>
+                <span class="svg-explorer__tree-tag">{{
+                  isTextNodeTag(row.node.tag) ? 'text_node' : childLabel(row.node)
+                }}</span>
                 <span v-if="row.id" class="svg-explorer__tree-id">#{{ row.id }}</span>
               </span>
+              <span v-if="isTextNodeTag(row.node.tag)" class="svg-explorer__tree-text">{{
+                childLabel(row.node)
+              }}</span>
               <span v-for="name in row.attrNames" :key="name" class="svg-explorer__tree-attr">
                 {{ name }}
               </span>
@@ -518,7 +574,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       </template>
 
       <template v-else-if="explorerMode === 'insert'">
-        <section v-if="schema?.children.length" class="svg-explorer__section">
+        <section v-if="hasInsertableChildren" class="svg-explorer__section">
           <div class="svg-explorer__section-header">
             <h3 class="svg-explorer__heading">Child elements</h3>
             <div class="svg-explorer__snippet-mode">
@@ -566,6 +622,36 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
             Show {{ hiddenInsertChildCount }} more…
           </button>
 
+          <template v-if="canInsertTextNode">
+            <h4 class="svg-explorer__subheading">Text</h4>
+            <div class="svg-explorer__chips">
+              <button
+                type="button"
+                class="svg-explorer__chip"
+                title="Insert text"
+                @click="emit('insertChild', 'text_node')"
+              >
+                text_node
+              </button>
+            </div>
+          </template>
+
+          <template v-if="descriptiveChildren.length">
+            <h4 class="svg-explorer__subheading">Description</h4>
+            <div class="svg-explorer__chips">
+              <button
+                v-for="tag in descriptiveChildren"
+                :key="tag"
+                type="button"
+                class="svg-explorer__chip"
+                :title="`Insert ${tag}`"
+                @click="emit('insertChild', tag)"
+              >
+                {{ tag }}
+              </button>
+            </div>
+          </template>
+
           <template v-if="animationChildren.length">
             <h4 class="svg-explorer__subheading">Animation</h4>
             <div class="svg-explorer__chips">
@@ -583,7 +669,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
           </template>
         </section>
 
-        <section v-if="schema" class="svg-explorer__section">
+        <section v-if="schema && schema.attributes.length" class="svg-explorer__section">
           <h3 class="svg-explorer__heading">Attributes</h3>
           <div class="svg-explorer__chips">
             <button
@@ -625,6 +711,14 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
         @select-command="onSelectCommand"
       />
 
+      <SvgTextNodeAdjuster
+        v-if="explorerMode === 'insert' && selectedNode && isTextNodeTag(selectedNode.tag)"
+        :key="pathKey(selectedNode.path)"
+        :node="selectedNode"
+        class="svg-explorer__section"
+        @update="onTextNodeUpdate"
+      />
+
       <BulkTransformPanel
         v-if="explorerMode === 'insert' && selectedPaths.length"
         :content="content"
@@ -637,7 +731,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       />
 
       <NumericAttributeScrubPanel
-        v-if="explorerMode === 'insert' && context"
+        v-if="explorerMode === 'insert' && context && schema?.attributes.length"
         :content="content"
         :context="context"
         :filter="filter"
@@ -964,6 +1058,14 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       content: '@';
       opacity: 0.6;
     }
+  }
+
+  &__tree-text {
+    color: var(--text-faint);
+    font-family: var(--font-family);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__chips {

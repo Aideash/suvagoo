@@ -1,11 +1,17 @@
 import {
   DEFAULT_SNIPPET_MODE,
   defaultAttributeValue,
+  defaultTextNodeContent,
   formatPathSegment,
   getElementSchema,
   getSnippetForTag,
+  holdsCharacterData,
+  isDescriptiveTag,
+  isTextContainerTag,
+  isTextNodeTag,
   normalizeTagName,
   parseViewBoxFromContent,
+  TEXT_NODE_TAG,
   type SnippetMode,
   type ViewBox,
 } from './svgSchema'
@@ -18,6 +24,8 @@ export interface PathSegment {
 export interface IndexedDocumentNode {
   tag: string
   attributes: Record<string, string>
+  /** Character data when `tag` is `text_node`; otherwise null. */
+  text: string | null
   children: IndexedDocumentNode[]
   path: PathSegment[]
   openTagStart: number
@@ -155,6 +163,43 @@ function readTagAt(
   return null
 }
 
+export function encodeXmlText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+export function decodeXmlText(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+}
+
+function attachTextNode(
+  parent: IndexedDocumentNode,
+  childCounts: Map<string, number>,
+  raw: string,
+  start: number,
+  end: number,
+): void {
+  if (end <= start) return
+  if (isTextContainerTag(parent.tag) && !raw.trim()) return
+  const index = childCounts.get(TEXT_NODE_TAG) ?? 0
+  childCounts.set(TEXT_NODE_TAG, index + 1)
+  parent.children.push({
+    tag: TEXT_NODE_TAG,
+    attributes: {},
+    text: decodeXmlText(raw),
+    children: [],
+    path: [...parent.path, { tag: TEXT_NODE_TAG, index }],
+    openTagStart: start,
+    openTagEnd: end,
+    closeTagEnd: end,
+    selfClosing: false,
+  })
+}
+
 export function pathsEqual(a: PathSegment[], b: PathSegment[]): boolean {
   return (
     a.length === b.length &&
@@ -182,8 +227,23 @@ export function parseIndexedDocument(content: string): IndexedDocumentNode | nul
 
   const rootCounts = new Map<string, number>()
   let root: IndexedDocumentNode | null = null
-  const stack: { node: IndexedDocumentNode; childCounts: Map<string, number> }[] = []
+  const stack: {
+    node: IndexedDocumentNode
+    childCounts: Map<string, number>
+    textStart: number
+  }[] = []
   let i = 0
+
+  function flushCharacterData(frame: (typeof stack)[number], end: number) {
+    if (!holdsCharacterData(frame.node.tag)) return
+    attachTextNode(
+      frame.node,
+      frame.childCounts,
+      content.slice(frame.textStart, end),
+      frame.textStart,
+      end,
+    )
+  }
 
   while (i < content.length) {
     if (content[i] !== '<') {
@@ -191,19 +251,14 @@ export function parseIndexedDocument(content: string): IndexedDocumentNode | nul
       continue
     }
 
-    const next = skipXmlDeclaration(content, i)
-    if (next !== i) {
-      i = next
-      continue
-    }
-    const comment = skipComment(content, i)
-    if (comment !== i) {
-      i = comment
-      continue
-    }
-    const cdata = skipCdata(content, i)
-    if (cdata !== i) {
-      i = cdata
+    const skipTo = skipXmlDeclaration(content, skipComment(content, skipCdata(content, i)))
+    if (skipTo !== i) {
+      const parent = stack.at(-1)
+      if (parent) {
+        flushCharacterData(parent, i)
+        parent.textStart = skipTo
+      }
+      i = skipTo
       continue
     }
 
@@ -213,18 +268,24 @@ export function parseIndexedDocument(content: string): IndexedDocumentNode | nul
     if (tag.isClose) {
       for (let depth = stack.length - 1; depth >= 0; depth -= 1) {
         if (stack[depth].node.tag === tag.tagName) {
-          stack[depth].node.closeTagEnd = tag.end
+          const frame = stack[depth]
+          frame.node.closeTagEnd = tag.end
+          flushCharacterData(frame, i)
           stack.splice(depth)
+          const parent = stack.at(-1)
+          if (parent) parent.textStart = tag.end
           break
         }
       }
     } else {
+      const parent = stack.at(-1)
+      if (parent) flushCharacterData(parent, i)
+
       const inner = tag.source.slice(1, tag.source.endsWith('/>') ? -2 : -1)
       const attributes = parseAttributes(inner)
 
       let path: PathSegment[]
-      if (stack.length) {
-        const parent = stack[stack.length - 1]
+      if (parent) {
         const index = parent.childCounts.get(tag.tagName) ?? 0
         parent.childCounts.set(tag.tagName, index + 1)
         path = [...parent.node.path, { tag: tag.tagName, index }]
@@ -237,6 +298,7 @@ export function parseIndexedDocument(content: string): IndexedDocumentNode | nul
       const node: IndexedDocumentNode = {
         tag: tag.tagName,
         attributes,
+        text: null,
         children: [],
         path,
         openTagStart: i,
@@ -245,14 +307,16 @@ export function parseIndexedDocument(content: string): IndexedDocumentNode | nul
         selfClosing: tag.isSelfClosing,
       }
 
-      if (stack.length) {
-        stack[stack.length - 1].node.children.push(node)
+      if (parent) {
+        parent.node.children.push(node)
       } else {
         root = node
       }
 
-      if (!tag.isSelfClosing) {
-        stack.push({ node, childCounts: new Map() })
+      if (tag.isSelfClosing) {
+        if (parent) parent.textStart = tag.end
+      } else {
+        stack.push({ node, childCounts: new Map(), textStart: tag.end })
       }
     }
 
@@ -303,9 +367,18 @@ export function cursorOffsetForPath(content: string, path: PathSegment[]): numbe
   const node = findNodeByPath(parseIndexedDocument(content), path)
   if (!node) return null
 
+  if (isTextNodeTag(node.tag)) {
+    return node.openTagStart
+  }
+
   if (node.selfClosing) {
     const openTag = content.slice(node.openTagStart, node.openTagEnd)
     return node.openTagEnd - (openTag.endsWith('/>') ? 2 : 1)
+  }
+
+  // Keep the caret on the open tag so text containers stay distinct from their text child.
+  if (holdsCharacterData(node.tag)) {
+    return Math.max(node.openTagStart, node.openTagEnd - 1)
   }
 
   return node.openTagEnd
@@ -375,7 +448,10 @@ export function findElementAtOffset(content: string, offset: number): ElementCon
       }
 
       if (clamped >= i && clamped <= tag.end) {
-        return frameToContext(stack, frame)
+        const inOpenTag = clamped < tag.end || tag.isSelfClosing || !holdsCharacterData(tag.tagName)
+        if (inOpenTag) {
+          return frameToContext(stack, frame)
+        }
       }
 
       if (!tag.isSelfClosing) {
@@ -390,7 +466,31 @@ export function findElementAtOffset(content: string, offset: number): ElementCon
     i = tag.end
   }
 
-  return candidate
+  return textNodeContextAtOffset(content, clamped, candidate) ?? candidate
+}
+
+function textNodeContextAtOffset(
+  content: string,
+  offset: number,
+  element: ElementContext | null,
+): ElementContext | null {
+  if (!element || !holdsCharacterData(element.tagName)) return null
+  const parent = findNodeByPath(parseIndexedDocument(content), element.path)
+  if (!parent) return null
+  const hit = parent.children.find((child) => {
+    if (!isTextNodeTag(child.tag)) return false
+    const end = child.closeTagEnd ?? child.openTagEnd
+    return offset >= child.openTagStart && offset < end
+  })
+  if (!hit) return null
+  return {
+    tagName: TEXT_NODE_TAG,
+    depth: element.depth + 1,
+    path: hit.path,
+    openTagStart: hit.openTagStart,
+    openTagEnd: hit.closeTagEnd ?? hit.openTagEnd,
+    existingAttributes: {},
+  }
 }
 
 function frameToContext(ancestors: OpenFrame[], frame: OpenFrame): ElementContext {
@@ -646,6 +746,39 @@ function cursorInsideInsertedTag(content: string, start: number): number {
   return tag.isSelfClosing ? tag.end - 2 : tag.end
 }
 
+function insertTextNodeChild(content: string, context: ElementContext): EditResult | null {
+  if (!holdsCharacterData(context.tagName)) return null
+
+  const parent = findNodeByPath(parseIndexedDocument(content), context.path)
+  if (!parent) return null
+
+  const hasText = parent.children.some((child) => isTextNodeTag(child.tag))
+  const hasElements = parent.children.some((child) => !isTextNodeTag(child.tag))
+  if (isDescriptiveTag(context.tagName) && hasText) return null
+  if (isTextContainerTag(context.tagName) && hasText && !hasElements) return null
+
+  const text = encodeXmlText(defaultTextNodeContent(context.tagName))
+  const openTag = content.slice(context.openTagStart, context.openTagEnd)
+
+  if (openTag.endsWith('/>')) {
+    const tagName = authoredTagName(openTag) ?? context.tagName
+    const replacementOpen = openTag.replace(/\/>$/, '>')
+    const block = `${replacementOpen}${text}</${tagName}>`
+    const next = content.slice(0, context.openTagStart) + block + content.slice(context.openTagEnd)
+    return { content: next, cursor: context.openTagStart + replacementOpen.length }
+  }
+
+  const closeIndex = findMatchingCloseTag(content, context.tagName, context.openTagEnd)
+  if (closeIndex == null) return null
+
+  if (isDescriptiveTag(context.tagName) && content.slice(context.openTagEnd, closeIndex).length) {
+    return null
+  }
+
+  const next = content.slice(0, closeIndex) + text + content.slice(closeIndex)
+  return { content: next, cursor: closeIndex }
+}
+
 export function insertChildElement(
   content: string,
   offset: number,
@@ -654,7 +787,7 @@ export function insertChildElement(
   viewBox: ViewBox = parseViewBoxFromContent(content),
 ): EditResult | null {
   const context = findElementAtOffset(content, offset)
-  if (!context) return null
+  if (!context || isTextNodeTag(context.tagName)) return null
 
   const schema = getElementSchema(context.tagName)
   const normalizedChild = normalizeTagName(childTag)
@@ -668,6 +801,10 @@ export function insertChildElement(
     !schema.children.some((tag) => normalizeTagName(tag) === normalizedChild)
   ) {
     return null
+  }
+
+  if (isTextNodeTag(childTag)) {
+    return insertTextNodeChild(content, context)
   }
 
   const snippet = getSnippetForTag(childTag, viewBox, snippetMode, context.tagName)
@@ -700,6 +837,19 @@ export function insertChildElement(
   const next = content.slice(0, insertAt) + insertion + content.slice(closeIndex)
   const insertedAt = insertAt + 1 + childIndent.length
   return { content: next, cursor: cursorInsideInsertedTag(next, insertedAt) }
+}
+
+export function updateTextNode(
+  content: string,
+  path: PathSegment[],
+  value: string,
+): EditResult | null {
+  const node = findNodeByPath(parseIndexedDocument(content), path)
+  if (!node || !isTextNodeTag(node.tag) || node.closeTagEnd == null) return null
+
+  const encoded = encodeXmlText(value)
+  const next = content.slice(0, node.openTagStart) + encoded + content.slice(node.closeTagEnd)
+  return { content: next, cursor: node.openTagStart }
 }
 
 export function deleteAttribute(
@@ -747,7 +897,9 @@ export function deleteChildElement(content: string, path: PathSegment[]): EditRe
   if (!node) return null
 
   const end = node.closeTagEnd ?? node.openTagEnd
-  const trimmed = trimDeletionRange(content, node.openTagStart, end)
+  const trimmed = isTextNodeTag(node.tag)
+    ? { start: node.openTagStart, end }
+    : trimDeletionRange(content, node.openTagStart, end)
   const next = content.slice(0, trimmed.start) + content.slice(trimmed.end)
   const cursor = Math.min(trimmed.start, next.length)
   return collapseToSelfClosing(next, path.slice(0, -1)) ?? { content: next, cursor }

@@ -4,7 +4,7 @@ import {
   type IndexedDocumentNode,
   type PathSegment,
 } from './svgDocument'
-import { getElementSchema } from './svgSchema'
+import { getElementSchema, isTextNodeTag } from './svgSchema'
 
 /** An `id` defined somewhere in the document, with the element that owns it. */
 export interface DocumentId {
@@ -53,6 +53,7 @@ export function collectDocumentIds(content: string): DocumentId[] {
   const seen = new Set<string>()
 
   function walk(node: IndexedDocumentNode) {
+    if (isTextNodeTag(node.tag)) return
     const id = node.attributes.id?.trim()
     if (id && !seen.has(id)) {
       seen.add(id)
@@ -80,6 +81,7 @@ export function findDocumentIdConflict(
   if (!needle) return null
 
   function walk(node: IndexedDocumentNode): DocumentId | null {
+    if (isTextNodeTag(node.tag)) return null
     const nodeId = node.attributes.id?.trim()
     if (nodeId === needle && (!excludePath || !pathsEqual(node.path, excludePath))) {
       return { id: nodeId, tag: getElementSchema(node.tag)?.tag ?? node.tag }

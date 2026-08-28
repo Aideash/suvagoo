@@ -89,6 +89,21 @@ const GRADIENT_CHILDREN = ['stop'] as const
 export const ANIMATION_ELEMENTS = ['animate', 'set', 'animateTransform', 'animateMotion'] as const
 
 /**
+ * Accessibility metadata. Offered on almost every element, kept apart from
+ * structural `children` the same way animation is, and joined in at lookup.
+ */
+export const DESCRIPTIVE_ELEMENTS = ['title', 'desc'] as const
+
+/**
+ * Sentinel child for character data. Not an SVG tag; listed only on elements
+ * whose content model is text (`title`, `desc`, `text`, `tspan`, `textPath`).
+ */
+export const TEXT_NODE_TAG = 'text_node'
+
+/** Graphical text elements that hold character data, possibly mixed with tspans. */
+export const TEXT_CONTAINER_ELEMENTS = ['text', 'tspan', 'textPath'] as const
+
+/**
  * Elements an animation element can be attached to. Kept apart from each
  * schema's `children` so the structural children stay readable, and joined in
  * when the lookup map is built.
@@ -355,7 +370,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       'fill-rule',
       ...GLOBAL_ATTRIBUTES,
     ],
-    children: ['tspan', 'textPath'],
+    children: ['tspan', 'textPath', TEXT_NODE_TAG],
     snippet: '<text x="50" y="55" text-anchor="middle" fill="#e8eaed">Label</text>',
   },
   {
@@ -363,7 +378,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     contentModel: 'text',
     commonAttributes: ['x', 'y', 'dx', 'dy', 'fill'],
     attributes: ['x', 'y', 'dx', 'dy', 'rotate', 'fill-rule', ...GLOBAL_ATTRIBUTES],
-    children: [],
+    children: [TEXT_NODE_TAG],
     snippet: '<tspan x="50" dy="1.2em">Line</tspan>',
   },
   {
@@ -371,7 +386,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     contentModel: 'text',
     commonAttributes: ['href', 'startOffset', 'fill'],
     attributes: ['href', 'startOffset', 'method', 'spacing', 'fill-rule', ...GLOBAL_ATTRIBUTES],
-    children: [],
+    children: [TEXT_NODE_TAG],
     snippet: '<textPath href="#my-path">Text on path</textPath>',
   },
   {
@@ -650,6 +665,22 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     children: [],
     snippet: '<mpath href="#path-id"/>',
   },
+  {
+    tag: 'title',
+    contentModel: 'text',
+    commonAttributes: [],
+    attributes: [],
+    children: [TEXT_NODE_TAG],
+    snippet: '<title>Title</title>',
+  },
+  {
+    tag: 'desc',
+    contentModel: 'text',
+    commonAttributes: [],
+    attributes: [],
+    children: [TEXT_NODE_TAG],
+    snippet: '<desc>Description</desc>',
+  },
   feElement(
     'feBlend',
     ['mode', 'in', 'in2', 'result'],
@@ -829,6 +860,27 @@ export function isAnimationTag(tag: string): boolean {
   return ANIMATION_TAG_SET.has(normalizeTagName(tag))
 }
 
+const DESCRIPTIVE_TAG_SET = new Set(DESCRIPTIVE_ELEMENTS.map(normalizeTagName))
+
+export function isDescriptiveTag(tag: string): boolean {
+  return DESCRIPTIVE_TAG_SET.has(normalizeTagName(tag))
+}
+
+export function isTextNodeTag(tag: string): boolean {
+  return normalizeTagName(tag) === TEXT_NODE_TAG
+}
+
+const TEXT_CONTAINER_TAG_SET = new Set(TEXT_CONTAINER_ELEMENTS.map(normalizeTagName))
+
+export function isTextContainerTag(tag: string): boolean {
+  return TEXT_CONTAINER_TAG_SET.has(normalizeTagName(tag))
+}
+
+/** Elements whose inner character data is modeled as `text_node` children. */
+export function holdsCharacterData(tag: string): boolean {
+  return isDescriptiveTag(tag) || isTextContainerTag(tag)
+}
+
 const ANIMATABLE_TAG_SET = new Set(ANIMATABLE_TAGS.map(normalizeTagName))
 const FILTER_ANIMATABLE_TAG_SET = new Set(FILTER_ANIMATABLE_TAGS.map(normalizeTagName))
 
@@ -843,8 +895,16 @@ function withAnimationChildren(schema: SvgElementSchema): SvgElementSchema {
   return schema
 }
 
+function withDescriptiveChildren(schema: SvgElementSchema): SvgElementSchema {
+  if (isDescriptiveTag(schema.tag)) return schema
+  return { ...schema, children: [...schema.children, ...DESCRIPTIVE_ELEMENTS] }
+}
+
 const schemaByTag = new Map(
-  SVG_ELEMENTS.map((entry) => [normalizeTagName(entry.tag), withAnimationChildren(entry)]),
+  SVG_ELEMENTS.map((entry) => [
+    normalizeTagName(entry.tag),
+    withDescriptiveChildren(withAnimationChildren(entry)),
+  ]),
 )
 
 const VIEWBOX_NUMERIC_ATTRS = new Set([
@@ -881,6 +941,7 @@ const DEFAULT_ATTR_VALUES: Record<string, string> = {
   href: '#id',
   id: 'id',
   offset: '50%',
+  startOffset: '0',
   'stop-color': '#3b82f6',
   'font-size': '16',
   'text-anchor': 'middle',
@@ -1330,4 +1391,20 @@ export function uniqueSorted(values: readonly string[]): string[] {
 
 export function formatPathSegment(segment: { tag: string; index: number }): string {
   return segment.index === 0 ? segment.tag : `${segment.tag}[${segment.index}]`
+}
+
+/** Placeholder character data when inserting a `text_node`. */
+export function defaultTextNodeContent(parentTag: string): string {
+  switch (normalizeTagName(parentTag)) {
+    case 'desc':
+      return 'Description'
+    case 'text':
+      return 'Label'
+    case 'textpath':
+      return 'Text on path'
+    case 'tspan':
+      return 'Line'
+    default:
+      return 'Title'
+  }
 }

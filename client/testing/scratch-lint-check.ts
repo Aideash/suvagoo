@@ -53,6 +53,7 @@ const CASES: [name: string, source: string, expected: string[]][] = [
     '<svg><circle r="5"><animate attributeName="r" dur="1s"/></circle></svg>',
     [],
   ],
+  ['title inside a shape', '<svg><circle r="5"><title>Label</title></circle></svg>', []],
   [
     'foreignObject holds host markup',
     '<svg><foreignObject><div xmlns="http://www.w3.org/1999/xhtml"><p>hi</p></div></foreignObject></svg>',
