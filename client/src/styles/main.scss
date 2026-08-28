@@ -267,6 +267,10 @@ button.ghost {
     }
   }
 
+  &--icon {
+    padding: $spacing-sm;
+  }
+
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -314,6 +318,19 @@ button.ghost {
     margin: 0;
     font-size: 1.25rem;
     font-weight: 600;
+  }
+
+  &__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: $spacing-sm;
+  }
+
+  &__logo {
+    width: 2rem;
+    height: 2rem;
+    display: block;
+    flex-shrink: 0;
   }
 
   &__actions {

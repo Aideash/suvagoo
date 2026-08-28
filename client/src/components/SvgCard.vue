@@ -1,28 +1,56 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { SvgMeta } from '../api/svgs'
-import { getSvg } from '../api/svgs'
+import { getSvgMarkup } from '../api/svgs'
 import SvgPreview from './SvgPreview.vue'
 
-defineProps<{
-  svg: SvgMeta
-  collectionName?: string | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    svg: SvgMeta
+    collectionName?: string | null
+    showFolder?: boolean
+  }>(),
+  { collectionName: null, showFolder: true },
+)
 
 const emit = defineEmits<{
   delete: [id: string]
 }>()
 
+const cardRef = ref<HTMLElement | null>(null)
 const previewContent = ref('')
+const previewFailed = ref(false)
 
-async function loadPreview(id: string) {
+let observer: IntersectionObserver | null = null
+
+async function loadPreview() {
+  if (previewContent.value || previewFailed.value) return
   try {
-    const record = await getSvg(id)
-    previewContent.value = record.content
+    previewContent.value = await getSvgMarkup(props.svg.id)
   } catch {
-    previewContent.value = ''
+    previewFailed.value = true
   }
 }
+
+onMounted(() => {
+  const el = cardRef.value
+  if (!el) return
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        void loadPreview()
+        observer?.disconnect()
+        observer = null
+      }
+    },
+    { rootMargin: '120px' },
+  )
+  observer.observe(el)
+})
+
+onBeforeUnmount(() => {
+  observer?.disconnect()
+})
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -31,40 +59,52 @@ function formatDate(iso: string): string {
     day: 'numeric',
   })
 }
+
+const emptyMessage = computed(() => (previewFailed.value ? 'Preview unavailable' : 'Loading…'))
 </script>
 
 <template>
-  <article class="svg-card">
-    <RouterLink
-      :to="{ name: 'view', params: { id: svg.id } }"
-      class="svg-card__preview-link"
-      :aria-label="`Preview of ${svg.name}`"
-      @mouseenter="loadPreview(svg.id)"
-      @focusin="loadPreview(svg.id)"
-    >
-      <SvgPreview :content="previewContent" empty-message="Hover to preview" isolate />
-    </RouterLink>
+  <article ref="cardRef" class="svg-card">
+    <div class="svg-card__preview">
+      <SvgPreview :content="previewContent" :empty-message="emptyMessage" isolate />
+    </div>
 
     <div class="svg-card__body">
       <h2 class="svg-card__title">
-        <RouterLink :to="{ name: 'view', params: { id: svg.id } }">
-          {{ svg.name }}
+        <RouterLink
+          :to="{ name: 'edit', params: { id: svg.id } }"
+          class="svg-card__link"
+          :title="`Edit ${svg.name}`"
+        >
+          <span class="visually-hidden">Edit </span>{{ svg.name }}
         </RouterLink>
-        <span v-if="collectionName" class="svg-card__folder"> — {{ collectionName }}</span>
       </h2>
-      <p class="svg-card__date">Updated {{ formatDate(svg.updatedAt) }}</p>
+      <p class="svg-card__meta">
+        <span v-if="showFolder && collectionName" class="svg-card__folder">{{
+          collectionName
+        }}</span>
+        <span class="svg-card__date">Updated {{ formatDate(svg.updatedAt) }}</span>
+      </p>
+    </div>
 
-      <div class="svg-card__actions">
-        <RouterLink :to="{ name: 'view', params: { id: svg.id } }" class="btn btn--secondary">
-          View
-        </RouterLink>
-        <RouterLink :to="{ name: 'edit', params: { id: svg.id } }" class="btn btn--secondary">
-          Edit
-        </RouterLink>
-        <button type="button" class="btn btn--danger" @click="emit('delete', svg.id)">
-          Delete
-        </button>
-      </div>
+    <div class="svg-card__actions">
+      <RouterLink
+        :to="{ name: 'view', params: { id: svg.id } }"
+        class="btn btn--secondary btn--icon"
+        :title="`View ${svg.name}`"
+        :aria-label="`View ${svg.name}`"
+      >
+        <span class="material-icons sm" aria-hidden="true">visibility</span>
+      </RouterLink>
+      <button
+        type="button"
+        class="btn btn--danger btn--icon"
+        :title="`Delete ${svg.name}`"
+        :aria-label="`Delete ${svg.name}`"
+        @click="emit('delete', svg.id)"
+      >
+        <span class="material-icons sm" aria-hidden="true">delete</span>
+      </button>
     </div>
   </article>
 </template>
@@ -73,6 +113,9 @@ function formatDate(iso: string): string {
 @use '../styles/variables' as *;
 
 .svg-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   background: $color-surface;
   border: 1px solid $color-border;
   border-radius: $radius-lg;
@@ -83,51 +126,72 @@ function formatDate(iso: string): string {
     border-color: var(--border-strong);
   }
 
-  &__preview-link {
-    display: block;
-    height: 160px;
-    color: inherit;
-    text-decoration: none;
-    border-radius: 14px 14px 0 0;
+  &:has(.svg-card__link:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 
-    &:focus-visible {
-      outline-offset: -2px;
-    }
+  &__preview {
+    height: 200px;
+    pointer-events: none;
   }
 
   &__body {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-xs;
     padding: $spacing-md;
+    padding-right: 5.5rem;
+    min-width: 0;
   }
 
   &__title {
-    margin: 0 0 $spacing-xs;
+    margin: 0;
     font-size: 1rem;
     font-weight: 600;
+  }
 
-    a {
-      color: $color-text;
-      text-decoration: none;
+  &__link {
+    color: $color-text;
+    text-decoration: none;
 
-      &:hover {
-        color: $color-accent;
-      }
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+
+    &:hover,
+    .svg-card:hover & {
+      color: $color-accent;
+    }
+
+    &:focus-visible {
+      outline: none;
     }
   }
 
-  &__folder {
-    font-weight: 400;
-    color: var(--text-faint);
-  }
-
-  &__date {
-    margin: 0 0 $spacing-md;
+  &__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: $spacing-xs $spacing-sm;
+    margin: 0;
     font-size: 0.8125rem;
     color: $color-text-muted;
   }
 
+  &__folder {
+    color: var(--text-faint);
+  }
+
   &__actions {
+    position: absolute;
+    z-index: 2;
+    right: $spacing-md;
+    bottom: $spacing-md;
     display: flex;
-    flex-wrap: wrap;
     gap: $spacing-sm;
   }
 }
