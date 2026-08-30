@@ -102,6 +102,7 @@ const LENGTH_ATTRS = new Set([
   'dx',
   'dy',
   'stroke-width',
+  'stroke-dashoffset',
   'font-size',
   'textLength',
   'pathLength',
@@ -140,6 +141,7 @@ const CSS_LENGTH_ATTRS = new Set([
   'dx',
   'dy',
   'stroke-width',
+  'stroke-dashoffset',
   'font-size',
   'textlength',
   'markerwidth',
@@ -484,6 +486,7 @@ export function numericRangeForAttribute(
   const schema = getAttributeSchema(name)
   const parsed = parseNumericValue(currentValue)
   const declaredStep = schema.step ?? 1
+  const attr = name.toLowerCase()
 
   if (schema.kind === 'opacity') {
     return { min: 0, max: 1, step: declaredStep }
@@ -496,6 +499,10 @@ export function numericRangeForAttribute(
     }
   }
 
+  if (attr === 'stroke-dashoffset' && parsed?.unit === '%') {
+    return { min: -100, max: 100, step: declaredStep }
+  }
+
   if (parsed?.unit === '%') {
     return { min: 0, max: 100, step: declaredStep }
   }
@@ -504,7 +511,6 @@ export function numericRangeForAttribute(
   const span = Math.max(width, height, 1)
   const baseStep = stepForSpan(declaredStep, span)
   const fineStep = stepForSpan(0.5, span)
-  const attr = name.toLowerCase()
 
   switch (attr) {
     case 'width':
@@ -539,6 +545,7 @@ export function numericRangeForAttribute(
       return { min: viewBox.minY - span, max: viewBox.minY + span * 2, step: baseStep }
     case 'dx':
     case 'dy':
+    case 'stroke-dashoffset':
       return { min: -span, max: span, step: baseStep }
     case 'startoffset':
       // Unitless values are a distance along the path; the viewBox span is a
