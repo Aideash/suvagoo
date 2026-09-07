@@ -7,6 +7,7 @@ import {
   getSnippetForTag,
   holdsCharacterData,
   isDescriptiveTag,
+  isStyleTag,
   isTextContainerTag,
   isTextNodeTag,
   normalizeTagName,
@@ -24,8 +25,12 @@ export interface PathSegment {
 export interface IndexedDocumentNode {
   tag: string
   attributes: Record<string, string>
-  /** Character data when `tag` is `text_node`; otherwise null. */
+  /** Character data when this is a `text_node` or `style` element. */
   text: string | null
+  /** Editable source range for character data, excluding an optional CDATA wrapper. */
+  textStart?: number
+  textEnd?: number
+  textCdata?: boolean
   children: IndexedDocumentNode[]
   path: PathSegment[]
   openTagStart: number
@@ -200,6 +205,27 @@ function attachTextNode(
   })
 }
 
+function attachStyleContent(
+  node: IndexedDocumentNode,
+  raw: string,
+  start: number,
+  end: number,
+): void {
+  const cdata = /^(\s*)<!\[CDATA\[([\s\S]*?)\]\]>(\s*)$/.exec(raw)
+  if (cdata) {
+    node.text = cdata[2]
+    node.textStart = start + cdata[1].length + '<![CDATA['.length
+    node.textEnd = end - cdata[3].length - ']]>'.length
+    node.textCdata = true
+    return
+  }
+
+  node.text = decodeXmlText(raw)
+  node.textStart = start
+  node.textEnd = end
+  node.textCdata = false
+}
+
 export function pathsEqual(a: PathSegment[], b: PathSegment[]): boolean {
   return (
     a.length === b.length &&
@@ -270,7 +296,16 @@ export function parseIndexedDocument(content: string): IndexedDocumentNode | nul
         if (stack[depth].node.tag === tag.tagName) {
           const frame = stack[depth]
           frame.node.closeTagEnd = tag.end
-          flushCharacterData(frame, i)
+          if (isStyleTag(frame.node.tag)) {
+            attachStyleContent(
+              frame.node,
+              content.slice(frame.node.openTagEnd, i),
+              frame.node.openTagEnd,
+              i,
+            )
+          } else {
+            flushCharacterData(frame, i)
+          }
           stack.splice(depth)
           const parent = stack.at(-1)
           if (parent) parent.textStart = tag.end
@@ -850,6 +885,28 @@ export function updateTextNode(
   const encoded = encodeXmlText(value)
   const next = content.slice(0, node.openTagStart) + encoded + content.slice(node.closeTagEnd)
   return { content: next, cursor: node.openTagStart }
+}
+
+export function updateStyleContent(
+  content: string,
+  path: PathSegment[],
+  value: string,
+): EditResult | null {
+  const node = findNodeByPath(parseIndexedDocument(content), path)
+  if (!node || !isStyleTag(node.tag)) return null
+
+  if (node.selfClosing) {
+    const openTag = content.slice(node.openTagStart, node.openTagEnd)
+    const tagName = authoredTagName(openTag) ?? 'style'
+    const expanded = `${openTag.replace(/\/>$/, '>')}${encodeXmlText(value)}</${tagName}>`
+    const next = content.slice(0, node.openTagStart) + expanded + content.slice(node.openTagEnd)
+    return { content: next, cursor: node.openTagStart + openTag.replace(/\/>$/, '>').length }
+  }
+  if (node.textStart == null || node.textEnd == null || node.closeTagEnd == null) return null
+
+  const encoded = node.textCdata ? value.replace(/\]\]>/g, ']]]]><![CDATA[>') : encodeXmlText(value)
+  const next = content.slice(0, node.textStart) + encoded + content.slice(node.textEnd)
+  return { content: next, cursor: node.textStart }
 }
 
 export function deleteAttribute(

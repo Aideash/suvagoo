@@ -6,6 +6,7 @@ import {
   getElementSchema,
   isAnimationTag,
   isDescriptiveTag,
+  isStyleTag,
   isTextNodeTag,
   uniqueSorted,
 } from '../lib/svgSchema'
@@ -24,6 +25,7 @@ import {
 } from '../lib/svgDocument'
 import SvgAttributeAdjuster from './SvgAttributeAdjuster.vue'
 import SvgTextNodeAdjuster from './SvgTextNodeAdjuster.vue'
+import SvgStyleAdjuster from './SvgStyleAdjuster.vue'
 import BulkTransformPanel from './BulkTransformPanel.vue'
 import NumericAttributeScrubPanel from './NumericAttributeScrubPanel.vue'
 import { useSnippetMode } from '../composables/useSnippetMode'
@@ -46,6 +48,7 @@ const emit = defineEmits<{
   deleteAttribute: [name: string]
   updateAttribute: [path: PathSegment[], name: string, value: string]
   updateTextNode: [path: PathSegment[], value: string]
+  updateStyleContent: [path: PathSegment[], value: string]
   'update:transformSession': [session: TransformSessionValues]
   transformCommit: []
   transformCancel: []
@@ -243,7 +246,7 @@ function elementId(node: IndexedDocumentNode): string | null {
 }
 
 function treeAttributeNames(node: IndexedDocumentNode): string[] {
-  if (isTextNodeTag(node.tag)) return []
+  if (isTextNodeTag(node.tag) || isStyleTag(node.tag)) return []
   return Object.keys(node.attributes)
     .filter((name) => !isIdAttribute(name))
     .slice(0, 3)
@@ -255,7 +258,7 @@ const existingChildren = computed(() => {
 })
 
 const existingAttributes = computed(() => {
-  if (!context.value) return []
+  if (!context.value || isStyleTag(context.value.tagName)) return []
   return uniqueSorted(
     Object.keys(context.value.existingAttributes).filter((name) => matchesNeedle(name)),
   )
@@ -308,9 +311,9 @@ function treeIndexForPath(path: PathSegment[]): number {
 
 function onTreeActivate(path: PathSegment[], event: MouseEvent | KeyboardEvent) {
   const index = treeIndexForPath(path)
-  const textNode = isTextNodeTag(path.at(-1)?.tag ?? '')
+  const contentNode = isTextNodeTag(path.at(-1)?.tag ?? '') || isStyleTag(path.at(-1)?.tag ?? '')
 
-  if (explorerMode.value === 'insert' && !textNode) {
+  if (explorerMode.value === 'insert' && !contentNode) {
     const meta = event.metaKey || event.ctrlKey
 
     if (event.shiftKey && selectionAnchorIndex.value != null && index >= 0) {
@@ -319,7 +322,10 @@ function onTreeActivate(path: PathSegment[], event: MouseEvent | KeyboardEvent) 
       const range = flatTree.value
         .slice(from, to + 1)
         .map((row) => row.node.path)
-        .filter((candidate) => !isTextNodeTag(candidate.at(-1)?.tag ?? ''))
+        .filter(
+          (candidate) =>
+            !isTextNodeTag(candidate.at(-1)?.tag ?? '') && !isStyleTag(candidate.at(-1)?.tag ?? ''),
+        )
       emit('selectionChange', range)
       emit('selectElement', path)
       return
@@ -411,6 +417,11 @@ function onAttributeUpdate(value: string) {
 function onTextNodeUpdate(value: string) {
   if (!selectedNode.value || !isTextNodeTag(selectedNode.value.tag)) return
   emit('updateTextNode', selectedNode.value.path, value)
+}
+
+function onStyleUpdate(value: string) {
+  if (!selectedNode.value || !isStyleTag(selectedNode.value.tag)) return
+  emit('updateStyleContent', selectedNode.value.path, value)
 }
 
 function onScrubUpdate(path: PathSegment[], name: string, value: string) {
@@ -699,7 +710,9 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       </template>
 
       <SvgAttributeAdjuster
-        v-if="explorerMode === 'insert' && activeAttribute"
+        v-if="
+          explorerMode === 'insert' && activeAttribute && context && !isStyleTag(context.tagName)
+        "
         :key="attributeIdentity(activeAttribute)"
         :attribute="activeAttribute"
         :content="content"
@@ -719,8 +732,21 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
         @update="onTextNodeUpdate"
       />
 
+      <SvgStyleAdjuster
+        v-if="explorerMode === 'insert' && selectedNode && isStyleTag(selectedNode.tag)"
+        :key="pathKey(selectedNode.path)"
+        :node="selectedNode"
+        class="svg-explorer__section"
+        @update="onStyleUpdate"
+      />
+
       <BulkTransformPanel
-        v-if="explorerMode === 'insert' && selectedPaths.length"
+        v-if="
+          explorerMode === 'insert' &&
+          selectedPaths.length &&
+          selectedNode &&
+          !isStyleTag(selectedNode.tag)
+        "
         :content="content"
         :selected-paths="selectedPaths"
         :session="transformSession"

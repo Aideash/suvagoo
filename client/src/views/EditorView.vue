@@ -16,6 +16,7 @@ import {
   insertChildElement,
   remapPathsAfterDelete,
   updateAttribute,
+  updateStyleContent,
   updateTextNode,
   type AttributeContext,
   type PathSegment,
@@ -490,6 +491,16 @@ function onUpdateTextNode(path: PathSegment[], value: string) {
   editorRef.value?.applyChange(result.content, result.cursor)
 }
 
+function onUpdateStyleContent(path: PathSegment[], value: string) {
+  builderError.value = ''
+  const result = updateStyleContent(content.value, path, value)
+  if (!result) {
+    builderError.value = 'Could not update stylesheet.'
+    return
+  }
+  editorRef.value?.applyChange(result.content, result.cursor)
+}
+
 function onPreviewStateChange(state: {
   attribute: AttributeContext | null
   selectedPointIndex: number | null
@@ -648,6 +659,7 @@ watch(
           @delete-attribute="onDeleteAttribute"
           @update-attribute="onUpdateAttribute"
           @update-text-node="onUpdateTextNode"
+          @update-style-content="onUpdateStyleContent"
           @update:transform-session="onTransformSessionUpdate"
           @transform-commit="onTransformCommit"
           @transform-cancel="onTransformCancel"

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import CoordinateReadout from './CoordinateReadout.vue'
 import HandleOverlay from './HandleOverlay.vue'
+import SvgMarkupHost from './SvgMarkupHost.vue'
 import type { IsolatedPreviewModel } from '../lib/isolatedPreview'
 import type { PathEditState, PointsEditState } from '../lib/handleEdit'
 import type { Point2D } from '../lib/pointsAttribute'
@@ -113,7 +114,7 @@ function onStageClick() {
         @click="onStageClick"
         @pointerdown="suppressClick = false"
       >
-        <div class="isolated-preview__artwork" v-html="sanitized" />
+        <SvgMarkupHost class="isolated-preview__artwork" :markup="sanitized" mode="fill" />
 
         <!-- Always present: the reference for pointer coordinates as well as the guides. -->
         <svg

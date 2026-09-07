@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Compartment, type EditorState } from '@codemirror/state'
 import { EditorView, basicSetup } from 'codemirror'
-import { xml } from '@codemirror/lang-xml'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import {
   closeLintPanel,
@@ -19,6 +18,7 @@ import { cursorOffsetForPath, findElementAtOffset } from '../lib/svgDocument'
 import { buildSvgCopy, type SvgCopyFormat } from '../lib/svgCopy'
 import { formatSvgSource, type SvgFormatLayout } from '../lib/svgFormat'
 import { lintSvgSource } from '../lib/svgLint'
+import { svg } from '../lib/svgCodeMirror'
 
 const props = defineProps<{
   modelValue: string
@@ -68,8 +68,14 @@ const editorTheme = EditorView.theme({
 })
 
 const highlighting = HighlightStyle.define([
-  { tag: [tags.tagName, tags.propertyName], color: 'var(--syntax-key)' },
-  { tag: tags.attributeName, color: 'var(--syntax-argument)' },
+  {
+    tag: [tags.tagName, tags.propertyName, tags.className],
+    color: 'var(--syntax-key)',
+  },
+  {
+    tag: [tags.attributeName, tags.definitionKeyword, tags.modifier],
+    color: 'var(--syntax-argument)',
+  },
   { tag: tags.string, color: 'var(--syntax-string)' },
   { tag: [tags.number, tags.integer, tags.float], color: 'var(--syntax-number)' },
   {
@@ -200,7 +206,7 @@ onMounted(() => {
     doc: props.modelValue,
     extensions: [
       basicSetup,
-      xml(),
+      svg(),
       editorTheme,
       syntaxHighlighting(highlighting),
       svgLinter,

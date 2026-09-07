@@ -74,6 +74,7 @@ const GRAPHICAL_CHILDREN = [
 ] as const
 
 const DEFS_CHILDREN = [
+  'style',
   'linearGradient',
   'radialGradient',
   'pattern',
@@ -100,6 +101,7 @@ export const DESCRIPTIVE_ELEMENTS = ['title', 'desc'] as const
  * whose content model is text (`title`, `desc`, `text`, `tspan`, `textPath`).
  */
 export const TEXT_NODE_TAG = 'text_node'
+export const STYLE_TAG = 'style'
 
 /** Graphical text elements that hold character data, possibly mixed with tspans. */
 export const TEXT_CONTAINER_ELEMENTS = ['text', 'tspan', 'textPath'] as const
@@ -279,6 +281,7 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
       'path',
       'text',
       'defs',
+      STYLE_TAG,
       ...GRAPHICAL_CHILDREN.filter((t) => t !== 'g'),
     ],
     snippet: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -389,6 +392,18 @@ const SVG_ELEMENTS: SvgElementSchema[] = [
     attributes: ['href', 'startOffset', 'method', 'spacing', 'fill-rule', ...GLOBAL_ATTRIBUTES],
     children: [TEXT_NODE_TAG],
     snippet: '<textPath href="#my-path">Text on path</textPath>',
+  },
+  {
+    tag: STYLE_TAG,
+    contentModel: 'text',
+    commonAttributes: [],
+    attributes: [],
+    children: [],
+    snippet: `<style>
+  .class-name {
+    fill: #3b82f6;
+  }
+</style>`,
   },
   {
     tag: 'defs',
@@ -869,6 +884,10 @@ export function isDescriptiveTag(tag: string): boolean {
 
 export function isTextNodeTag(tag: string): boolean {
   return normalizeTagName(tag) === TEXT_NODE_TAG
+}
+
+export function isStyleTag(tag: string): boolean {
+  return normalizeTagName(tag) === STYLE_TAG
 }
 
 const TEXT_CONTAINER_TAG_SET = new Set(TEXT_CONTAINER_ELEMENTS.map(normalizeTagName))

@@ -4,6 +4,7 @@ import CoordinateReadout from './CoordinateReadout.vue'
 import HandleOverlay from './HandleOverlay.vue'
 import SvgDefsPreview from './SvgDefsPreview.vue'
 import SvgIsolatedPreview from './SvgIsolatedPreview.vue'
+import SvgMarkupHost from './SvgMarkupHost.vue'
 import type { DefsPreviewModel } from '../lib/defsPreview'
 import type { IsolatedPreviewModel } from '../lib/isolatedPreview'
 import type { HandleSurface, PathEditState, PointsEditState } from '../lib/handleEdit'
@@ -136,7 +137,7 @@ function tickFraction(value: number, min: number, span: number): number {
 }
 
 const contentRef = ref<HTMLElement | null>(null)
-const svgHostRef = ref<HTMLElement | null>(null)
+const svgHostRef = ref<InstanceType<typeof SvgMarkupHost> | null>(null)
 const readoutRef = ref<{ capture: () => void } | null>(null)
 const cursorCoords = ref<Point2D | null>(null)
 
@@ -144,7 +145,7 @@ const hasAnimation = computed(() => markupHasAnimation(sanitized.value))
 const playing = ref(true)
 
 function svgRoot(): SVGSVGElement | null {
-  return svgHostRef.value?.querySelector('svg') ?? null
+  return svgHostRef.value?.root() ?? null
 }
 
 function applyPlayback(root: SVGSVGElement | null) {
@@ -181,7 +182,7 @@ function restartAnimation() {
 }
 
 /**
- * Rendering with v-html replaces the whole subtree on every edit, which would
+ * Replacing the rendered subtree on every edit would
  * restart the timeline from zero. Reading the clock before the swap and writing
  * it back afterwards keeps the animation at the phase the user is watching
  * while they scrub a value. The watcher is pre-flush so it still sees the
@@ -356,7 +357,7 @@ onBeforeUnmount(() => {
 })
 
 function onMouseMove(event: MouseEvent) {
-  const svg = contentRef.value?.querySelector('svg')
+  const svg = svgRoot()
   if (!svg || !containsClientPoint(svg, event.clientX, event.clientY)) {
     cursorCoords.value = null
     return
@@ -597,7 +598,12 @@ function addClickedPoint() {
             </button>
 
             <div class="svg-preview__viewport" :style="viewTransform">
-              <div ref="svgHostRef" class="svg-preview__svg-host" v-html="sanitized" />
+              <SvgMarkupHost
+                ref="svgHostRef"
+                class="svg-preview__svg-host"
+                :markup="sanitized"
+                mode="fill"
+              />
               <HandleOverlay
                 v-if="documentHandles"
                 :view-box="viewBox"
@@ -636,12 +642,12 @@ function addClickedPoint() {
           class="svg-preview__specimen"
           :class="{ 'svg-preview__specimen--labeled': sampleText != null }"
         >
-          <div class="svg-preview__graphic" v-html="sanitized" />
+          <SvgMarkupHost class="svg-preview__graphic" :markup="sanitized" mode="specimen" />
           <span v-if="sampleText != null" class="svg-preview__sample-text">{{ sampleText }}</span>
         </div>
       </div>
 
-      <div v-else class="svg-preview__content" v-html="sanitized" />
+      <SvgMarkupHost v-else class="svg-preview__content" :markup="sanitized" />
     </template>
 
     <p v-else class="svg-preview__empty">{{ emptyMessage }}</p>

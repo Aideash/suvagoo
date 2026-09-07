@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { DefsPreviewModel } from '../lib/defsPreview'
 import { sanitizeSvgMarkup } from '../lib/previewMarkup'
+import SvgMarkupHost from './SvgMarkupHost.vue'
 
 const props = defineProps<{
   preview: DefsPreviewModel
@@ -13,6 +14,15 @@ const entries = computed(() =>
     sanitized: sanitizeSvgMarkup(entry.content),
   })),
 )
+
+const sampleCss = `
+  svg { max-height: 320px; }
+  .suvagoo-sample-backdrop { fill: color-mix(in srgb, var(--bg-hover) 65%, var(--bg)); }
+  .suvagoo-sample-primary { fill: var(--accent); }
+  .suvagoo-sample-secondary { fill: var(--text); }
+  .suvagoo-sample-outline { stroke: var(--border-strong); }
+  .suvagoo-sample-stroke { stroke: var(--accent); }
+`
 </script>
 
 <template>
@@ -28,7 +38,13 @@ const entries = computed(() =>
     >
       <article v-for="entry in entries" :key="entry.key" class="defs-preview__card">
         <header class="defs-preview__label">{{ entry.label }}</header>
-        <div v-if="entry.sanitized" class="defs-preview__artwork" v-html="entry.sanitized" />
+        <SvgMarkupHost
+          v-if="entry.sanitized"
+          class="defs-preview__artwork"
+          :markup="entry.sanitized"
+          :content-css="sampleCss"
+          mode="fill"
+        />
         <p v-else class="defs-preview__unsupported">
           &lt;{{ entry.tag }}&gt; does not have a standalone preview.
         </p>
