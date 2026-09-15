@@ -12,9 +12,13 @@ import {
   deleteAttribute,
   deleteChildElement,
   findElementAtOffset,
+  findNodeByPath,
+  findNodeCoveringOffset,
   insertAttribute,
   insertChildElement,
+  parseIndexedDocument,
   remapPathsAfterDelete,
+  toggleCommentElement,
   updateAttribute,
   updateStyleContent,
   updateTextNode,
@@ -456,6 +460,36 @@ function onDeleteChild(path: PathSegment[]) {
   editorRef.value?.applyChange(result.content, result.cursor)
 }
 
+function onToggleComment(path: PathSegment[]) {
+  builderError.value = ''
+  const before = findNodeByPath(parseIndexedDocument(content.value), path)
+  const commenting = before ? !before.commentedOut : true
+
+  const result = toggleCommentElement(content.value, path)
+  if (!result) {
+    builderError.value = commenting
+      ? 'Could not comment out that element.'
+      : 'Could not uncomment that element.'
+    return
+  }
+
+  if (commenting) {
+    const remaining = remapPathsAfterDelete(selectedPaths.value, path)
+    if (remaining.length !== selectedPaths.value.length) {
+      transformSession.value = createIdentitySession(selectionPivot(result.content, remaining))
+    }
+    selectedPaths.value = remaining
+  } else {
+    selectedPaths.value = remapPathsAfterDelete(selectedPaths.value, path)
+  }
+
+  const nextNode = findNodeCoveringOffset(parseIndexedDocument(result.content), result.cursor)
+  const cursor = nextNode
+    ? (cursorOffsetForPath(result.content, nextNode.path) ?? result.cursor)
+    : result.cursor
+  editorRef.value?.applyChange(result.content, cursor)
+}
+
 function onDeleteAttribute(name: string) {
   builderError.value = ''
   const path = findElementAtOffset(content.value, cursorOffset.value)?.path
@@ -657,6 +691,7 @@ watch(
           @selection-change="onSelectionChange"
           @delete-child="onDeleteChild"
           @delete-attribute="onDeleteAttribute"
+          @toggle-comment="onToggleComment"
           @update-attribute="onUpdateAttribute"
           @update-text-node="onUpdateTextNode"
           @update-style-content="onUpdateStyleContent"

@@ -224,7 +224,7 @@ export function buildDefsPreview(content: string, cursorOffset: number): DefsPre
   const nodes =
     selectedNode && selectedNode.path.length === defsPath.length + 1
       ? [selectedNode]
-      : activeDefs.children.filter((node) => !isTextNodeTag(node.tag))
+      : activeDefs.children.filter((node) => !isTextNodeTag(node.tag) && !node.commentedOut)
 
   return {
     mode: selectedNode ? 'resource' : 'gallery',

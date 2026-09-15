@@ -1,6 +1,6 @@
 import { css, cssLanguage } from '@codemirror/lang-css'
 import { xml, xmlLanguage } from '@codemirror/lang-xml'
-import { LanguageSupport, LRLanguage } from '@codemirror/language'
+import { LanguageSupport } from '@codemirror/language'
 import { parseMixed, type Input, type SyntaxNodeRef } from '@lezer/common'
 
 function elementName(node: SyntaxNodeRef, input: Input): string | null {
@@ -10,7 +10,12 @@ function elementName(node: SyntaxNodeRef, input: Input): string | null {
   return tagName ? input.read(tagName.from, tagName.to).replace(/^.*:/, '').toLowerCase() : null
 }
 
-const svgParser = xmlLanguage.parser.configure({
+/**
+ * Configure the stock XML language in place. Re-defining via `LRLanguage.define`
+ * and passing `xmlLanguage.data` (a Facet, not a config object) drops
+ * `commentTokens`, so Mod-/ `toggleComment` becomes a no-op.
+ */
+export const svgLanguage = xmlLanguage.configure({
   wrap: parseMixed((node, input) => {
     if (elementName(node, input) !== 'style') return null
     return {
@@ -28,12 +33,6 @@ const svgParser = xmlLanguage.parser.configure({
 })
 
 /** XML language support with CSS mounted inside SVG style elements. */
-export const svgLanguage = LRLanguage.define({
-  name: 'svg',
-  parser: svgParser,
-  languageData: xmlLanguage.data,
-})
-
 export function svg(): LanguageSupport {
   return new LanguageSupport(svgLanguage, [xml().support, css().support])
 }

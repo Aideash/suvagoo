@@ -1,4 +1,5 @@
 import {
+  COMMENTED_ELEMENT_TAG,
   DEFAULT_SNIPPET_MODE,
   defaultAttributeValue,
   defaultTextNodeContent,
@@ -6,6 +7,7 @@ import {
   getElementSchema,
   getSnippetForTag,
   holdsCharacterData,
+  isCommentedElementTag,
   isDescriptiveTag,
   isStyleTag,
   isTextContainerTag,
@@ -31,6 +33,10 @@ export interface IndexedDocumentNode {
   textStart?: number
   textEnd?: number
   textCdata?: boolean
+  /** True when this node is an element wrapped in `<!-- … -->`. */
+  commentedOut?: boolean
+  /** Real SVG tag when `commentedOut` (path tag is `commented_element`). */
+  commentedTag?: string
   children: IndexedDocumentNode[]
   path: PathSegment[]
   openTagStart: number
@@ -49,6 +55,7 @@ export interface ElementContext {
   openTagStart: number
   openTagEnd: number
   existingAttributes: Record<string, string>
+  commentedOut?: boolean
 }
 
 export interface EditResult {
@@ -121,6 +128,66 @@ function skipCdata(content: string, index: number): number {
     return end >= 0 ? end + 3 : content.length
   }
   return index
+}
+
+/**
+ * Rewrite comment closers so a parent wrap cannot be truncated by nested
+ * comments. Uses `- ->` (not `-- >`) so the result stays valid XML — the
+ * XML spec forbids `--` inside comment content, which is also what DOMParser
+ * rejects.
+ */
+export function escapeCommentClosers(value: string): string {
+  return value.replaceAll('-->', '- ->')
+}
+
+/**
+ * Inverse of `escapeCommentClosers` before parsing or restoring a commented
+ * element. Also accepts the earlier `-- >` form.
+ */
+export function unescapeCommentClosers(value: string): string {
+  return value.replaceAll('-- >', '-->').replaceAll('- ->', '-->')
+}
+
+/**
+ * True when `body` (comment interior) is a single element plus optional
+ * whitespace. Nested closers must already be escaped as `- ->` (or legacy
+ * `-- >`) in the source body.
+ */
+function tryParseSingleElementFragment(body: string): IndexedDocumentNode | null {
+  const unescaped = unescapeCommentClosers(body)
+  const leading = /^\s*/.exec(unescaped)?.[0].length ?? 0
+  if (leading >= unescaped.length || unescaped[leading] !== '<') return null
+  if (
+    unescaped.startsWith('<!--', leading) ||
+    unescaped.startsWith('<?', leading) ||
+    unescaped.startsWith('<!', leading)
+  ) {
+    return null
+  }
+
+  const tag = readTagAt(unescaped, leading)
+  if (!tag || tag.isClose) return null
+
+  let end: number
+  if (tag.isSelfClosing) {
+    end = tag.end
+  } else {
+    const closeAt = findMatchingCloseTag(unescaped, tag.tagName, tag.end)
+    if (closeAt == null) return null
+    const closeTag = readTagAt(unescaped, closeAt)
+    if (!closeTag) return null
+    end = closeTag.end
+  }
+
+  if (unescaped.slice(end).trim() !== '') return null
+  return parseIndexedDocument(unescaped.slice(leading, end))
+}
+
+function readCommentSpan(content: string, index: number): { end: number; body: string } | null {
+  if (!content.startsWith('<!--', index)) return null
+  const close = content.indexOf('-->', index + 4)
+  if (close < 0) return { end: content.length, body: content.slice(index + 4) }
+  return { end: close + 3, body: content.slice(index + 4, close) }
 }
 
 function readTagAt(
@@ -236,11 +303,69 @@ export function pathsEqual(a: PathSegment[], b: PathSegment[]): boolean {
   )
 }
 
+/**
+ * Drop XML comments. Attribute values are left alone so a literal `<!--`
+ * inside quotes is not mistaken for markup.
+ */
+export function stripXmlComments(content: string): string {
+  let out = ''
+  let i = 0
+  while (i < content.length) {
+    if (content.startsWith('<!--', i)) {
+      const end = content.indexOf('-->', i + 4)
+      i = end >= 0 ? end + 3 : content.length
+      continue
+    }
+
+    if (content[i] === '<') {
+      if (content.startsWith('<![CDATA[', i)) {
+        const end = content.indexOf(']]>', i + 9)
+        const close = end >= 0 ? end + 3 : content.length
+        out += content.slice(i, close)
+        i = close
+        continue
+      }
+      if (content.startsWith('<?', i)) {
+        const end = content.indexOf('?>', i + 2)
+        const close = end >= 0 ? end + 2 : content.length
+        out += content.slice(i, close)
+        i = close
+        continue
+      }
+
+      let j = i + 1
+      let quote: '"' | "'" | null = null
+      while (j < content.length) {
+        const ch = content[j]
+        if (quote) {
+          if (ch === quote) quote = null
+        } else if (ch === '"' || ch === "'") {
+          quote = ch
+        } else if (ch === '>') {
+          j += 1
+          break
+        }
+        j += 1
+      }
+      out += content.slice(i, j)
+      i = j
+      continue
+    }
+
+    out += content[i]
+    i += 1
+  }
+  return out
+}
+
 export function isXmlParsable(content: string): boolean {
   const trimmed = content.trim()
   if (!trimmed) return true
   try {
-    const doc = new DOMParser().parseFromString(trimmed, 'image/svg+xml')
+    // Comments are not part of the live tree; stripping them avoids false
+    // failures from `--` inside comments (illegal in XML, used by our nest
+    // escape and by some prose notes).
+    const doc = new DOMParser().parseFromString(stripXmlComments(trimmed), 'image/svg+xml')
     return !doc.querySelector('parsererror')
   } catch {
     return false
@@ -277,14 +402,59 @@ export function parseIndexedDocument(content: string): IndexedDocumentNode | nul
       continue
     }
 
-    const skipTo = skipXmlDeclaration(content, skipComment(content, skipCdata(content, i)))
-    if (skipTo !== i) {
+    const cdataTo = skipCdata(content, i)
+    if (cdataTo !== i) {
       const parent = stack.at(-1)
       if (parent) {
         flushCharacterData(parent, i)
-        parent.textStart = skipTo
+        parent.textStart = cdataTo
       }
-      i = skipTo
+      i = cdataTo
+      continue
+    }
+
+    const comment = readCommentSpan(content, i)
+    if (comment) {
+      const parent = stack.at(-1)
+      const inner =
+        comment.end <= content.length ? tryParseSingleElementFragment(comment.body) : null
+      if (inner && parent) {
+        flushCharacterData(parent, i)
+        const index = parent.childCounts.get(COMMENTED_ELEMENT_TAG) ?? 0
+        parent.childCounts.set(COMMENTED_ELEMENT_TAG, index + 1)
+        parent.node.children.push({
+          tag: COMMENTED_ELEMENT_TAG,
+          commentedOut: true,
+          commentedTag: inner.tag,
+          attributes: inner.attributes,
+          text: null,
+          children: [],
+          path: [...parent.node.path, { tag: COMMENTED_ELEMENT_TAG, index }],
+          openTagStart: i,
+          openTagEnd: comment.end,
+          closeTagEnd: comment.end,
+          selfClosing: true,
+        })
+        parent.textStart = comment.end
+        i = comment.end
+        continue
+      }
+      if (parent) {
+        flushCharacterData(parent, i)
+        parent.textStart = comment.end
+      }
+      i = comment.end
+      continue
+    }
+
+    const declTo = skipXmlDeclaration(content, i)
+    if (declTo !== i) {
+      const parent = stack.at(-1)
+      if (parent) {
+        flushCharacterData(parent, i)
+        parent.textStart = declTo
+      }
+      i = declTo
       continue
     }
 
@@ -381,6 +551,26 @@ export function findNodeByPath(
   return null
 }
 
+/** Deepest indexed node whose source span covers `offset`. */
+export function findNodeCoveringOffset(
+  root: IndexedDocumentNode | null,
+  offset: number,
+): IndexedDocumentNode | null {
+  if (!root) return null
+
+  function walk(node: IndexedDocumentNode): IndexedDocumentNode | null {
+    const end = node.closeTagEnd ?? node.openTagEnd
+    if (offset < node.openTagStart || offset >= end) return null
+    for (const child of node.children) {
+      const hit = walk(child)
+      if (hit) return hit
+    }
+    return node
+  }
+
+  return walk(root)
+}
+
 export function findElementByPath(content: string, path: PathSegment[]): ElementContext | null {
   const node = findNodeByPath(parseIndexedDocument(content), path)
   if (!node) return null
@@ -389,18 +579,23 @@ export function findElementByPath(content: string, path: PathSegment[]): Element
 
 function nodeToContext(node: IndexedDocumentNode): ElementContext {
   return {
-    tagName: node.tag,
+    tagName: node.commentedOut ? (node.commentedTag ?? node.tag) : node.tag,
     depth: Math.max(0, node.path.length - 1),
     path: node.path,
     openTagStart: node.openTagStart,
     openTagEnd: node.openTagEnd,
     existingAttributes: node.attributes,
+    commentedOut: node.commentedOut === true,
   }
 }
 
 export function cursorOffsetForPath(content: string, path: PathSegment[]): number | null {
   const node = findNodeByPath(parseIndexedDocument(content), path)
   if (!node) return null
+
+  if (node.commentedOut || isCommentedElementTag(node.tag)) {
+    return node.openTagStart
+  }
 
   if (isTextNodeTag(node.tag)) {
     return node.openTagStart
@@ -500,6 +695,9 @@ export function findElementAtOffset(content: string, offset: number): ElementCon
 
     i = tag.end
   }
+
+  const covering = findNodeCoveringOffset(parseIndexedDocument(content), clamped)
+  if (covering?.commentedOut) return nodeToContext(covering)
 
   return textNodeContextAtOffset(content, clamped, candidate) ?? candidate
 }
@@ -641,7 +839,7 @@ function attributeValueCursor(
 
 export function findAttributeAtOffset(content: string, offset: number): AttributeContext | null {
   const element = findElementAtOffset(content, offset)
-  if (!element) return null
+  if (!element || element.commentedOut) return null
 
   const openTag = content.slice(element.openTagStart, element.openTagEnd)
   for (const range of parseAttributeRanges(openTag, element.openTagStart)) {
@@ -681,7 +879,7 @@ export function updateAttribute(
   newValue: string,
 ): EditResult | null {
   const context = findElementByPath(content, path)
-  if (!context) return null
+  if (!context || context.commentedOut) return null
   if (context.existingAttributes[attrName] === undefined) return null
 
   const openTag = content.slice(context.openTagStart, context.openTagEnd)
@@ -740,7 +938,7 @@ export function insertAttribute(
   viewBox: ViewBox = parseViewBoxFromContent(content),
 ): EditResult | null {
   const context = findElementAtOffset(content, offset)
-  if (!context) return null
+  if (!context || context.commentedOut) return null
 
   const openTag = content.slice(context.openTagStart, context.openTagEnd)
   const existing = context.existingAttributes[attrName]
@@ -822,7 +1020,7 @@ export function insertChildElement(
   viewBox: ViewBox = parseViewBoxFromContent(content),
 ): EditResult | null {
   const context = findElementAtOffset(content, offset)
-  if (!context || isTextNodeTag(context.tagName)) return null
+  if (!context || context.commentedOut || isTextNodeTag(context.tagName)) return null
 
   const schema = getElementSchema(context.tagName)
   const normalizedChild = normalizeTagName(childTag)
@@ -915,7 +1113,7 @@ export function deleteAttribute(
   attrName: string,
 ): EditResult | null {
   const context = findElementByPath(content, path)
-  if (!context) return null
+  if (!context || context.commentedOut) return null
 
   const openTag = content.slice(context.openTagStart, context.openTagEnd)
   const updated = removeAttributeFromOpenTag(openTag, attrName)
@@ -960,6 +1158,47 @@ export function deleteChildElement(content: string, path: PathSegment[]): EditRe
   const next = content.slice(0, trimmed.start) + content.slice(trimmed.end)
   const cursor = Math.min(trimmed.start, next.length)
   return collapseToSelfClosing(next, path.slice(0, -1)) ?? { content: next, cursor }
+}
+
+/**
+ * Wrap a live element in `<!-- … -->`, escaping any `-->` in the range so
+ * nested comments cannot truncate the wrap.
+ */
+export function commentOutElement(content: string, path: PathSegment[]): EditResult | null {
+  if (path.length <= 1) return null
+
+  const node = findNodeByPath(parseIndexedDocument(content), path)
+  if (!node) return null
+  if (node.commentedOut || isCommentedElementTag(node.tag) || isTextNodeTag(node.tag)) return null
+
+  const end = node.closeTagEnd ?? node.openTagEnd
+  const slice = content.slice(node.openTagStart, end)
+  const replacement = `<!--${escapeCommentClosers(slice)}-->`
+  const next = content.slice(0, node.openTagStart) + replacement + content.slice(end)
+  return { content: next, cursor: node.openTagStart }
+}
+
+/** Restore a commented-out element by unescaping its body and removing the wrappers. */
+export function uncommentElement(content: string, path: PathSegment[]): EditResult | null {
+  const node = findNodeByPath(parseIndexedDocument(content), path)
+  if (!node?.commentedOut) return null
+
+  const end = node.closeTagEnd ?? node.openTagEnd
+  const raw = content.slice(node.openTagStart, end)
+  if (!raw.startsWith('<!--') || !raw.endsWith('-->')) return null
+
+  const restored = unescapeCommentClosers(raw.slice(4, -3))
+  const next = content.slice(0, node.openTagStart) + restored + content.slice(end)
+  return { content: next, cursor: node.openTagStart }
+}
+
+export function toggleCommentElement(content: string, path: PathSegment[]): EditResult | null {
+  const node = findNodeByPath(parseIndexedDocument(content), path)
+  if (!node) return null
+  if (node.commentedOut || isCommentedElementTag(node.tag)) {
+    return uncommentElement(content, path)
+  }
+  return commentOutElement(content, path)
 }
 
 /**

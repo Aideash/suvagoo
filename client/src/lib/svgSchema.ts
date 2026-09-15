@@ -102,6 +102,8 @@ export const DESCRIPTIVE_ELEMENTS = ['title', 'desc'] as const
  */
 export const TEXT_NODE_TAG = 'text_node'
 export const STYLE_TAG = 'style'
+/** Indexed placeholder for an element wrapped in `<!-- … -->`. Not an SVG tag. */
+export const COMMENTED_ELEMENT_TAG = 'commented_element'
 
 /** Graphical text elements that hold character data, possibly mixed with tspans. */
 export const TEXT_CONTAINER_ELEMENTS = ['text', 'tspan', 'textPath'] as const
@@ -884,6 +886,10 @@ export function isDescriptiveTag(tag: string): boolean {
 
 export function isTextNodeTag(tag: string): boolean {
   return normalizeTagName(tag) === TEXT_NODE_TAG
+}
+
+export function isCommentedElementTag(tag: string): boolean {
+  return normalizeTagName(tag) === COMMENTED_ELEMENT_TAG
 }
 
 export function isStyleTag(tag: string): boolean {

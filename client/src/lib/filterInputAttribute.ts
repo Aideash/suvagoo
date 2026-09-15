@@ -59,7 +59,7 @@ export function collectFilterInputOptions(
   const results: FilterInputOption[] = []
 
   for (const primitive of filter.children) {
-    if (isTextNodeTag(primitive.tag)) continue
+    if (isTextNodeTag(primitive.tag) || primitive.commentedOut) continue
     if (pathsEqual(primitive.path, currentPrimitivePath)) break
     addResultOption(primitive, seen, results)
   }

@@ -1,7 +1,12 @@
 /** Prepare document markup for rendering in a preview surface. */
 
 import DOMPurify from 'dompurify'
-import { isXmlParsable, parseIndexedDocument, type IndexedDocumentNode } from './svgDocument'
+import {
+  isXmlParsable,
+  parseIndexedDocument,
+  stripXmlComments,
+  type IndexedDocumentNode,
+} from './svgDocument'
 
 const OPEN_TAG = /<([A-Za-z][\w:.-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/g
 const ATTRIBUTE = /([A-Za-z][\w:.-]*)(\s*=\s*)(["'])([^"']*)\3/g
@@ -141,10 +146,13 @@ export function buildPreviewImage(sanitized: string, color: string): PreviewImag
   }
 
   const standalone = withRootAttributes(sanitized, root, added)
-  if (!isXmlParsable(standalone)) return null
+  // Comments never paint; stripping them keeps the data URI valid XML even when
+  // a comment body contains `--` (illegal per the XML spec).
+  const forImage = stripXmlComments(standalone)
+  if (!isXmlParsable(forImage)) return null
 
   return {
-    src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(standalone)}`,
+    src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(forImage)}`,
     intrinsicSize: statesOwnSize(root),
   }
 }

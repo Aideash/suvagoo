@@ -5,6 +5,7 @@ import {
   formatPathSegment,
   getElementSchema,
   isAnimationTag,
+  isCommentedElementTag,
   isDescriptiveTag,
   isStyleTag,
   isTextNodeTag,
@@ -29,6 +30,7 @@ import SvgStyleAdjuster from './SvgStyleAdjuster.vue'
 import BulkTransformPanel from './BulkTransformPanel.vue'
 import NumericAttributeScrubPanel from './NumericAttributeScrubPanel.vue'
 import { useSnippetMode } from '../composables/useSnippetMode'
+import { useTreeRowSwipe } from '../composables/useTreeRowSwipe'
 import type { TransformSessionValues } from '../lib/transformSession'
 
 const props = defineProps<{
@@ -46,6 +48,7 @@ const emit = defineEmits<{
   selectionChange: [paths: PathSegment[][]]
   deleteChild: [path: PathSegment[]]
   deleteAttribute: [name: string]
+  toggleComment: [path: PathSegment[]]
   updateAttribute: [path: PathSegment[], name: string, value: string]
   updateTextNode: [path: PathSegment[], value: string]
   updateStyleContent: [path: PathSegment[], value: string]
@@ -63,6 +66,7 @@ const emit = defineEmits<{
 }>()
 
 const { isPreFilled, toggleSnippetMode } = useSnippetMode()
+const treeSwipe = useTreeRowSwipe()
 
 const filter = ref('')
 const fieldId = useId()
@@ -87,6 +91,11 @@ const selectedNode = computed(() => {
   if (!indexedDocument.value || !context.value) return null
   return findNodeByPath(indexedDocument.value, context.value.path)
 })
+const selectionCommented = computed(
+  () => selectedNode.value?.commentedOut === true || context.value?.commentedOut === true,
+)
+/** Insert panels stay visible (disabled) while a commented-out element is selected. */
+const showInsertPanels = computed(() => explorerMode.value === 'insert' || selectionCommented.value)
 
 watch(deleteMode, (enabled) => {
   if (enabled) {
@@ -161,7 +170,9 @@ const visibleInsertChildren = computed(() => {
 })
 
 const hiddenInsertChildCount = computed(() => {
-  if (deleteMode.value || needle.value || showAllChildren.value) return 0
+  if ((deleteMode.value && !selectionCommented.value) || needle.value || showAllChildren.value) {
+    return 0
+  }
   return Math.max(0, structuralChildren.value.length - EXPLORER_COMMON_LIMIT)
 })
 
@@ -212,18 +223,23 @@ const visibleInsertAttributes = computed(() => {
     ...commonAttributes.value,
     ...(showAllAttributes.value || needle.value ? extraAttributes.value : []),
   ]
-  if (deleteMode.value) return []
+  if (deleteMode.value && !selectionCommented.value) return []
   if (needle.value || showAllAttributes.value) return attrs
   return attrs.slice(0, EXPLORER_COMMON_LIMIT)
 })
 
 const hiddenInsertAttributeCount = computed(() => {
-  if (deleteMode.value || needle.value || showAllAttributes.value) return 0
+  if ((deleteMode.value && !selectionCommented.value) || needle.value || showAllAttributes.value) {
+    return 0
+  }
   const total = uniqueSorted([...commonAttributes.value, ...extraAttributes.value]).length
   return Math.max(0, total - EXPLORER_COMMON_LIMIT)
 })
 
 function childLabel(node: IndexedDocumentNode): string {
+  if (node.commentedOut || isCommentedElementTag(node.tag)) {
+    return node.commentedTag ?? 'commented'
+  }
   if (isTextNodeTag(node.tag)) {
     const preview = (node.text ?? '').replace(/\s+/g, ' ').trim()
     if (!preview) return 'text_node'
@@ -246,10 +262,44 @@ function elementId(node: IndexedDocumentNode): string | null {
 }
 
 function treeAttributeNames(node: IndexedDocumentNode): string[] {
+  if (node.commentedOut || isCommentedElementTag(node.tag)) return []
   if (isTextNodeTag(node.tag) || isStyleTag(node.tag)) return []
   return Object.keys(node.attributes)
     .filter((name) => !isIdAttribute(name))
     .slice(0, 3)
+}
+
+function canToggleComment(node: IndexedDocumentNode): boolean {
+  if (isTextNodeTag(node.tag)) return false
+  if (node.commentedOut || isCommentedElementTag(node.tag)) return true
+  return node.path.length > 1
+}
+
+function onToggleComment(path: PathSegment[]) {
+  emit('toggleComment', path)
+}
+
+function onTreeRowPointerDown(node: IndexedDocumentNode, event: PointerEvent) {
+  if (!canToggleComment(node)) return
+  treeSwipe.start(event, node.path, onToggleComment)
+}
+
+function onTreeRowClick(path: PathSegment[], event: MouseEvent) {
+  if (treeSwipe.consumeSuppressedClick(event)) return
+  onTreeActivate(path, event)
+}
+
+function onTreeRowKeydown(path: PathSegment[], event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key === '/') {
+    event.preventDefault()
+    const node = flatTree.value.find((row) => pathsEqual(row.node.path, path))?.node
+    if (node && canToggleComment(node)) onToggleComment(path)
+    return
+  }
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    onTreeActivate(path, event)
+  }
 }
 
 const existingChildren = computed(() => {
@@ -311,7 +361,10 @@ function treeIndexForPath(path: PathSegment[]): number {
 
 function onTreeActivate(path: PathSegment[], event: MouseEvent | KeyboardEvent) {
   const index = treeIndexForPath(path)
-  const contentNode = isTextNodeTag(path.at(-1)?.tag ?? '') || isStyleTag(path.at(-1)?.tag ?? '')
+  const contentNode =
+    isTextNodeTag(path.at(-1)?.tag ?? '') ||
+    isStyleTag(path.at(-1)?.tag ?? '') ||
+    isCommentedElementTag(path.at(-1)?.tag ?? '')
 
   if (explorerMode.value === 'insert' && !contentNode) {
     const meta = event.metaKey || event.ctrlKey
@@ -324,7 +377,9 @@ function onTreeActivate(path: PathSegment[], event: MouseEvent | KeyboardEvent) 
         .map((row) => row.node.path)
         .filter(
           (candidate) =>
-            !isTextNodeTag(candidate.at(-1)?.tag ?? '') && !isStyleTag(candidate.at(-1)?.tag ?? ''),
+            !isTextNodeTag(candidate.at(-1)?.tag ?? '') &&
+            !isStyleTag(candidate.at(-1)?.tag ?? '') &&
+            !isCommentedElementTag(candidate.at(-1)?.tag ?? ''),
         )
       emit('selectionChange', range)
       emit('selectElement', path)
@@ -503,7 +558,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
 
       <section class="svg-explorer__section">
         <h3 class="svg-explorer__heading">Document</h3>
-        <p class="svg-explorer__hint">Click to select</p>
+        <p class="svg-explorer__hint">Click to select · Swipe right or ⌘/ to comment</p>
         <p v-if="explorerMode === 'insert'" class="svg-explorer__hint">
           Bulk Transform: ⌘/Ctrl+click toggle · Shift+click range
         </p>
@@ -519,12 +574,18 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
               :class="{
                 active: isActivePath(row.node.path),
                 selected: isMultiSelected(row.node.path) && explorerMode === 'insert',
+                'svg-explorer__tree-row--commented': row.node.commentedOut,
               }"
+              :style="{ transform: `translateX(${treeSwipe.rowOffset(row.node.path)}px)` }"
               :aria-current="isActivePath(row.node.path) ? 'true' : undefined"
-              :title="`Select ${formatElementPath(row.node.path)}`"
-              @click="onTreeActivate(row.node.path, $event)"
-              @keydown.enter.prevent="onTreeActivate(row.node.path, $event)"
-              @keydown.space.prevent="onTreeActivate(row.node.path, $event)"
+              :title="
+                canToggleComment(row.node)
+                  ? `${row.node.commentedOut ? 'Uncomment' : 'Comment'} ${childLabel(row.node)} (swipe or ⌘/)`
+                  : `Select ${formatElementPath(row.node.path)}`
+              "
+              @pointerdown="onTreeRowPointerDown(row.node, $event)"
+              @click="onTreeRowClick(row.node.path, $event)"
+              @keydown="onTreeRowKeydown(row.node.path, $event)"
             >
               <span class="svg-explorer__tree-label">
                 <span class="svg-explorer__tree-tag">{{
@@ -543,7 +604,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
         </ul>
       </section>
 
-      <template v-if="deleteMode">
+      <template v-if="deleteMode && !selectionCommented">
         <section v-if="existingChildren.length" class="svg-explorer__section">
           <h3 class="svg-explorer__heading">Remove child</h3>
           <div class="svg-explorer__chips">
@@ -584,7 +645,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
         </p>
       </template>
 
-      <template v-else-if="explorerMode === 'insert'">
+      <template v-else-if="showInsertPanels">
         <section v-if="hasInsertableChildren" class="svg-explorer__section">
           <div class="svg-explorer__section-header">
             <h3 class="svg-explorer__heading">Child elements</h3>
@@ -597,6 +658,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
                 class="svg-explorer__snippet-track"
                 role="switch"
                 :aria-checked="isPreFilled"
+                :disabled="selectionCommented"
                 aria-label="Insert pre-filled snippets"
                 :title="
                   isPreFilled
@@ -618,7 +680,8 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
               :key="tag"
               type="button"
               class="svg-explorer__chip"
-              :title="`Insert ${tag}`"
+              :disabled="selectionCommented"
+              :title="selectionCommented ? undefined : `Insert ${tag}`"
               @click="emit('insertChild', tag)"
             >
               {{ tag }}
@@ -628,6 +691,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
             v-if="hiddenInsertChildCount"
             type="button"
             class="svg-explorer__more"
+            :disabled="selectionCommented"
             @click="showAllChildren = true"
           >
             Show {{ hiddenInsertChildCount }} more…
@@ -639,6 +703,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
               <button
                 type="button"
                 class="svg-explorer__chip"
+                :disabled="selectionCommented"
                 title="Insert text"
                 @click="emit('insertChild', 'text_node')"
               >
@@ -655,7 +720,8 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
                 :key="tag"
                 type="button"
                 class="svg-explorer__chip"
-                :title="`Insert ${tag}`"
+                :disabled="selectionCommented"
+                :title="selectionCommented ? undefined : `Insert ${tag}`"
                 @click="emit('insertChild', tag)"
               >
                 {{ tag }}
@@ -671,7 +737,8 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
                 :key="tag"
                 type="button"
                 class="svg-explorer__chip"
-                :title="`Insert ${tag}`"
+                :disabled="selectionCommented"
+                :title="selectionCommented ? undefined : `Insert ${tag}`"
                 @click="emit('insertChild', tag)"
               >
                 {{ tag }}
@@ -690,9 +757,16 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
               class="svg-explorer__chip"
               :class="{
                 present: existingAttributeNames.has(name),
-                selected: activeAttribute?.attrName === name,
+                selected: !selectionCommented && activeAttribute?.attrName === name,
               }"
-              :title="existingAttributeNames.has(name) ? `Adjust ${name}` : `Insert ${name}`"
+              :disabled="selectionCommented"
+              :title="
+                selectionCommented
+                  ? undefined
+                  : existingAttributeNames.has(name)
+                    ? `Adjust ${name}`
+                    : `Insert ${name}`
+              "
               @click="onAttributeChipClick(name)"
             >
               {{ name }}
@@ -702,6 +776,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
             v-if="hiddenInsertAttributeCount"
             type="button"
             class="svg-explorer__more"
+            :disabled="selectionCommented"
             @click="showAllAttributes = true"
           >
             Show {{ hiddenInsertAttributeCount }} more…
@@ -711,7 +786,11 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
 
       <SvgAttributeAdjuster
         v-if="
-          explorerMode === 'insert' && activeAttribute && context && !isStyleTag(context.tagName)
+          explorerMode === 'insert' &&
+          !selectionCommented &&
+          activeAttribute &&
+          context &&
+          !isStyleTag(context.tagName)
         "
         :key="attributeIdentity(activeAttribute)"
         :attribute="activeAttribute"
@@ -725,7 +804,12 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       />
 
       <SvgTextNodeAdjuster
-        v-if="explorerMode === 'insert' && selectedNode && isTextNodeTag(selectedNode.tag)"
+        v-if="
+          explorerMode === 'insert' &&
+          !selectionCommented &&
+          selectedNode &&
+          isTextNodeTag(selectedNode.tag)
+        "
         :key="pathKey(selectedNode.path)"
         :node="selectedNode"
         class="svg-explorer__section"
@@ -733,7 +817,12 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       />
 
       <SvgStyleAdjuster
-        v-if="explorerMode === 'insert' && selectedNode && isStyleTag(selectedNode.tag)"
+        v-if="
+          explorerMode === 'insert' &&
+          !selectionCommented &&
+          selectedNode &&
+          isStyleTag(selectedNode.tag)
+        "
         :key="pathKey(selectedNode.path)"
         :node="selectedNode"
         class="svg-explorer__section"
@@ -743,6 +832,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       <BulkTransformPanel
         v-if="
           explorerMode === 'insert' &&
+          !selectionCommented &&
           selectedPaths.length &&
           selectedNode &&
           !isStyleTag(selectedNode.tag)
@@ -757,7 +847,9 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       />
 
       <NumericAttributeScrubPanel
-        v-if="explorerMode === 'insert' && context && schema?.attributes.length"
+        v-if="
+          explorerMode === 'insert' && !selectionCommented && context && schema?.attributes.length
+        "
         :content="content"
         :context="context"
         :filter="filter"
@@ -901,6 +993,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
 
     &:before {
       content: ' ';
+      pointer-events: none;
       display: block;
       min-height: 1.25rem;
       width: 100%;
@@ -912,6 +1005,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
 
     &:after {
       content: ' ';
+      pointer-events: none;
       display: block;
       min-height: 1rem;
       width: 100%;
@@ -1032,6 +1126,8 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
     color: inherit;
     text-align: left;
     cursor: pointer;
+    touch-action: pan-y;
+    transition: transform 0.12s ease-out;
 
     &:hover {
       background: color-mix(in srgb, var(--accent) 8%, transparent);
@@ -1053,6 +1149,15 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
     &.selected:focus-visible {
       outline-color: $color-accent;
       outline-width: 2px;
+    }
+
+    &--commented {
+      opacity: 0.45;
+
+      .svg-explorer__tree-tag,
+      .svg-explorer__tree-id {
+        color: $color-text-muted;
+      }
     }
   }
 
@@ -1113,9 +1218,14 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
       border-color 0.12s,
       color 0.12s;
 
-    &:hover {
+    &:hover:not(:disabled) {
       border-color: $color-accent;
       color: $color-accent;
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
 
     &.present {
