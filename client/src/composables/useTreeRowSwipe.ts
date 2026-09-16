@@ -1,5 +1,4 @@
 import { onBeforeUnmount, ref } from 'vue'
-import type { PathSegment } from '../lib/svgDocument'
 
 const DRAG_THRESHOLD_PX = 4
 const AXIS_LOCK_PX = 6
@@ -9,10 +8,12 @@ const SWIPE_COMMIT_PX = 56
 /**
  * Horizontal-only swipe on a track. Vertical motion cancels so the explorer
  * list can still scroll. Commits when released past the threshold.
+ * `key` identifies the active row/chip for visual offset only; `commit` is a
+ * closure that performs the action.
  */
 export function useTreeRowSwipe() {
   const offsetX = ref(0)
-  const activePathKey = ref<string | null>(null)
+  const activeKey = ref<string | null>(null)
 
   let pointerId: number | null = null
   let target: HTMLElement | null = null
@@ -22,17 +23,12 @@ export function useTreeRowSwipe() {
   let dragged = false
   let suppressClick = false
   let suppressClickTimer: number | null = null
-  let pendingPath: PathSegment[] | null = null
   let pendingKey: string | null = null
-  let onCommit: ((path: PathSegment[]) => void) | null = null
-
-  function pathKey(path: PathSegment[]): string {
-    return path.map((segment) => `${segment.tag}:${segment.index}`).join('/')
-  }
+  let onCommit: (() => void) | null = null
 
   function resetVisual() {
     offsetX.value = 0
-    activePathKey.value = null
+    activeKey.value = null
   }
 
   function stop(commit: boolean) {
@@ -43,10 +39,9 @@ export function useTreeRowSwipe() {
     window.removeEventListener('pointerup', onPointerUp)
     window.removeEventListener('pointercancel', onPointerCancel)
 
-    const path = pendingPath
     const commitFn = onCommit
     const shouldCommit =
-      commit && axis === 'horizontal' && offsetX.value >= SWIPE_COMMIT_PX && path && commitFn
+      commit && axis === 'horizontal' && offsetX.value >= SWIPE_COMMIT_PX && commitFn
 
     if (dragged) {
       suppressClick = true
@@ -59,14 +54,13 @@ export function useTreeRowSwipe() {
 
     pointerId = null
     target = null
-    pendingPath = null
     pendingKey = null
     onCommit = null
     axis = 'pending'
     dragged = false
     resetVisual()
 
-    if (shouldCommit && path && commitFn) commitFn(path)
+    if (shouldCommit && commitFn) commitFn()
   }
 
   function onPointerMove(event: PointerEvent) {
@@ -84,7 +78,7 @@ export function useTreeRowSwipe() {
       if (Math.abs(dx) >= AXIS_LOCK_PX) {
         axis = 'horizontal'
         dragged = true
-        activePathKey.value = pendingKey
+        activeKey.value = pendingKey
       } else {
         return
       }
@@ -103,15 +97,14 @@ export function useTreeRowSwipe() {
     if (event.pointerId === pointerId) stop(false)
   }
 
-  function start(event: PointerEvent, path: PathSegment[], commit: (path: PathSegment[]) => void) {
+  function start(event: PointerEvent, key: string, commit: () => void) {
     if (event.button !== 0) return
     stop(false)
     startX = event.clientX
     startY = event.clientY
     pointerId = event.pointerId
     target = event.currentTarget as HTMLElement
-    pendingPath = path
-    pendingKey = pathKey(path)
+    pendingKey = key
     onCommit = commit
     axis = 'pending'
     target.setPointerCapture(pointerId)
@@ -120,8 +113,8 @@ export function useTreeRowSwipe() {
     window.addEventListener('pointercancel', onPointerCancel)
   }
 
-  function rowOffset(path: PathSegment[]): number {
-    return activePathKey.value === pathKey(path) ? offsetX.value : 0
+  function rowOffset(key: string): number {
+    return activeKey.value === key ? offsetX.value : 0
   }
 
   function consumeSuppressedClick(event: MouseEvent): boolean {

@@ -19,6 +19,7 @@ import {
   parseIndexedDocument,
   remapPathsAfterDelete,
   toggleCommentElement,
+  toggleIgnoreAttribute,
   updateAttribute,
   updateStyleContent,
   updateTextNode,
@@ -505,6 +506,21 @@ function onDeleteAttribute(name: string) {
   editorRef.value?.applyChange(result.content, result.cursor)
 }
 
+function onToggleIgnoreAttribute(name: string) {
+  builderError.value = ''
+  const path = findElementAtOffset(content.value, cursorOffset.value)?.path
+  if (!path) {
+    builderError.value = `Could not ignore attribute ${name}.`
+    return
+  }
+  const result = toggleIgnoreAttribute(content.value, path, name)
+  if (!result) {
+    builderError.value = `Could not toggle ignore for attribute ${name}.`
+    return
+  }
+  editorRef.value?.applyChange(result.content, result.cursor)
+}
+
 function onUpdateAttribute(path: PathSegment[], name: string, value: string) {
   builderError.value = ''
   const result = updateAttribute(content.value, path, name, value)
@@ -692,6 +708,7 @@ watch(
           @delete-child="onDeleteChild"
           @delete-attribute="onDeleteAttribute"
           @toggle-comment="onToggleComment"
+          @toggle-ignore-attribute="onToggleIgnoreAttribute"
           @update-attribute="onUpdateAttribute"
           @update-text-node="onUpdateTextNode"
           @update-style-content="onUpdateStyleContent"

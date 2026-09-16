@@ -9,6 +9,7 @@ import {
   type AttributeKind,
 } from '../lib/attributeSchema'
 import type { ElementContext, PathSegment } from '../lib/svgDocument'
+import { isIgnoredAttributeName } from '../lib/svgDocument'
 import { viewBoxForAttribute } from '../lib/svgViewport'
 import { useNumericScrub } from '../composables/useNumericScrub'
 
@@ -34,6 +35,7 @@ const rows = computed(() => {
   const needle = props.filter?.trim().toLowerCase() ?? ''
   return Object.entries(props.context.existingAttributes)
     .flatMap(([name, value]) => {
+      if (isIgnoredAttributeName(name)) return []
       if (needle && !name.toLowerCase().includes(needle)) return []
       const schema = getAttributeSchema(name, props.context.tagName)
       const parsed = parseNumericValue(value)

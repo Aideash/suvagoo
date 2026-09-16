@@ -16,7 +16,9 @@ import {
   findElementAtOffset,
   findNodeByPath,
   formatElementPath,
+  isIgnoredAttributeName,
   isXmlParsable,
+  parseIgnoredAttributeName,
   parseIndexedDocument,
   pathsEqual,
   attributeIdentity,
@@ -49,6 +51,7 @@ const emit = defineEmits<{
   deleteChild: [path: PathSegment[]]
   deleteAttribute: [name: string]
   toggleComment: [path: PathSegment[]]
+  toggleIgnoreAttribute: [name: string]
   updateAttribute: [path: PathSegment[], name: string, value: string]
   updateTextNode: [path: PathSegment[], value: string]
   updateStyleContent: [path: PathSegment[], value: string]
@@ -265,7 +268,7 @@ function treeAttributeNames(node: IndexedDocumentNode): string[] {
   if (node.commentedOut || isCommentedElementTag(node.tag)) return []
   if (isTextNodeTag(node.tag) || isStyleTag(node.tag)) return []
   return Object.keys(node.attributes)
-    .filter((name) => !isIdAttribute(name))
+    .filter((name) => !isIdAttribute(name) && !isIgnoredAttributeName(name))
     .slice(0, 3)
 }
 
@@ -281,7 +284,7 @@ function onToggleComment(path: PathSegment[]) {
 
 function onTreeRowPointerDown(node: IndexedDocumentNode, event: PointerEvent) {
   if (!canToggleComment(node)) return
-  treeSwipe.start(event, node.path, onToggleComment)
+  treeSwipe.start(event, pathKey(node.path), () => onToggleComment(node.path))
 }
 
 function onTreeRowClick(path: PathSegment[], event: MouseEvent) {
@@ -299,6 +302,37 @@ function onTreeRowKeydown(path: PathSegment[], event: KeyboardEvent) {
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault()
     onTreeActivate(path, event)
+  }
+}
+
+function attributeSwipeKey(name: string): string {
+  return `attr:${name}`
+}
+
+function onToggleIgnoreAttribute(name: string) {
+  emit('toggleIgnoreAttribute', name)
+}
+
+function onAttributeChipPointerDown(name: string, present: boolean, event: PointerEvent) {
+  if (!present || selectionCommented.value) return
+  treeSwipe.start(event, attributeSwipeKey(name), () => onToggleIgnoreAttribute(name))
+}
+
+function onAttributeChipClick(name: string, event?: MouseEvent) {
+  if (event && treeSwipe.consumeSuppressedClick(event)) return
+  emit('insertAttribute', name)
+}
+
+function onAttributeChipKeydown(name: string, present: boolean, event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key === '/') {
+    if (!present || selectionCommented.value) return
+    event.preventDefault()
+    onToggleIgnoreAttribute(name)
+    return
+  }
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    onAttributeChipClick(name)
   }
 }
 
@@ -405,9 +439,34 @@ function onTreeActivate(path: PathSegment[], event: MouseEvent | KeyboardEvent) 
   emit('selectElement', path)
 }
 
-function onAttributeChipClick(name: string) {
-  emit('insertAttribute', name)
+const ignoredAttributes = computed(() => {
+  if (!context.value || isStyleTag(context.value.tagName)) return []
+  const items = Object.entries(context.value.existingAttributes).flatMap(([name, value]) => {
+    const parsed = parseIgnoredAttributeName(name)
+    if (!parsed) return []
+    if (!matchesNeedle(parsed.base) && !matchesNeedle(name)) return []
+    return [{ name, value, id: parsed.id, base: parsed.base }]
+  })
+  return items.sort((a, b) => a.base.localeCompare(b.base) || a.id - b.id)
+})
+
+function ignoredAttributeLabel(item: { name: string; id: number; base: string }): string {
+  const dupes = ignoredAttributes.value.filter((other) => other.base === item.base).length > 1
+  return dupes ? `${item.base} · ${item.id}` : item.base
 }
+
+function ignoredAttributeTitle(item: {
+  name: string
+  value: string
+  base: string
+}): string | undefined {
+  if (selectionCommented.value) return undefined
+  return `Restore ${item.base} (swipe or ⌘/) — ${item.name}="${item.value}"`
+}
+
+const activeAttributeIgnored = computed(
+  () => activeAttribute.value != null && isIgnoredAttributeName(activeAttribute.value.attrName),
+)
 
 watch(activeAttribute, (attr) => {
   if (attr?.attrName !== 'points') {
@@ -426,7 +485,7 @@ watch(selectedPathHandleIndex, () => emitPreviewState())
 
 function emitPreviewState() {
   emit('previewStateChange', {
-    attribute: activeAttribute.value,
+    attribute: activeAttributeIgnored.value ? null : activeAttribute.value,
     selectedPointIndex: selectedPointIndex.value,
     selectedCommandIndex: selectedCommandIndex.value,
     selectedPathHandleIndex: selectedPathHandleIndex.value,
@@ -576,7 +635,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
                 selected: isMultiSelected(row.node.path) && explorerMode === 'insert',
                 'svg-explorer__tree-row--commented': row.node.commentedOut,
               }"
-              :style="{ transform: `translateX(${treeSwipe.rowOffset(row.node.path)}px)` }"
+              :style="{ transform: `translateX(${treeSwipe.rowOffset(pathKey(row.node.path))}px)` }"
               :aria-current="isActivePath(row.node.path) ? 'true' : undefined"
               :title="
                 canToggleComment(row.node)
@@ -749,6 +808,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
 
         <section v-if="schema && schema.attributes.length" class="svg-explorer__section">
           <h3 class="svg-explorer__heading">Attributes</h3>
+          <p v-if="!selectionCommented" class="svg-explorer__hint">Swipe right or ⌘/ to ignore</p>
           <div class="svg-explorer__chips">
             <button
               v-for="name in visibleInsertAttributes"
@@ -759,15 +819,22 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
                 present: existingAttributeNames.has(name),
                 selected: !selectionCommented && activeAttribute?.attrName === name,
               }"
+              :style="{
+                transform: `translateX(${treeSwipe.rowOffset(attributeSwipeKey(name))}px)`,
+              }"
               :disabled="selectionCommented"
               :title="
                 selectionCommented
                   ? undefined
                   : existingAttributeNames.has(name)
-                    ? `Adjust ${name}`
+                    ? `Ignore or adjust ${name} (swipe or ⌘/)`
                     : `Insert ${name}`
               "
-              @click="onAttributeChipClick(name)"
+              @pointerdown="
+                onAttributeChipPointerDown(name, existingAttributeNames.has(name), $event)
+              "
+              @click="onAttributeChipClick(name, $event)"
+              @keydown="onAttributeChipKeydown(name, existingAttributeNames.has(name), $event)"
             >
               {{ name }}
             </button>
@@ -781,6 +848,31 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
           >
             Show {{ hiddenInsertAttributeCount }} more…
           </button>
+
+          <template v-if="ignoredAttributes.length">
+            <h4 class="svg-explorer__subheading">Ignored</h4>
+            <div class="svg-explorer__chips">
+              <button
+                v-for="item in ignoredAttributes"
+                :key="item.name"
+                type="button"
+                class="svg-explorer__chip svg-explorer__chip--ignored"
+                :class="{
+                  selected: !selectionCommented && activeAttribute?.attrName === item.name,
+                }"
+                :style="{
+                  transform: `translateX(${treeSwipe.rowOffset(attributeSwipeKey(item.name))}px)`,
+                }"
+                :disabled="selectionCommented"
+                :title="ignoredAttributeTitle(item)"
+                @pointerdown="onAttributeChipPointerDown(item.name, true, $event)"
+                @click="onAttributeChipClick(item.name, $event)"
+                @keydown="onAttributeChipKeydown(item.name, true, $event)"
+              >
+                {{ ignoredAttributeLabel(item) }}
+              </button>
+            </div>
+          </template>
         </section>
       </template>
 
@@ -789,6 +881,7 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
           explorerMode === 'insert' &&
           !selectionCommented &&
           activeAttribute &&
+          !activeAttributeIgnored &&
           context &&
           !isStyleTag(context.tagName)
         "
@@ -1236,6 +1329,23 @@ function onScrubUpdate(path: PathSegment[], name: string, value: string) {
     &.selected {
       background: color-mix(in srgb, var(--accent) 12%, transparent);
       border-color: $color-accent;
+    }
+
+    &--ignored {
+      opacity: 0.45;
+      color: $color-text-muted;
+      border-style: dashed;
+
+      &:hover:not(:disabled) {
+        color: $color-text-muted;
+        border-color: $color-border;
+      }
+
+      &.selected {
+        opacity: 0.7;
+        background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+        border-color: $color-border;
+      }
     }
 
     &--danger {

@@ -862,14 +862,20 @@ export function findAttributeAtOffset(content: string, offset: number): Attribut
 }
 
 function replaceAttributeValue(openTag: string, attrName: string, newValue: string): string | null {
-  const escaped = attrName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const pattern = new RegExp(`(\\b${escaped}\\s*=\\s*)("([^"]*)"|'([^']*)'|([^\\s"'=<>\`]+))`, 'i')
-  if (!pattern.test(openTag)) return null
-  return openTag.replace(pattern, (_match, prefix, rawValue) => {
-    if (rawValue.startsWith('"')) return `${prefix}"${newValue}"`
-    if (rawValue.startsWith("'")) return `${prefix}'${newValue}'`
-    return `${prefix}${newValue}`
-  })
+  const ranges = parseAttributeRanges(openTag, 0)
+  const range = ranges.find((entry) => entry.name === attrName)
+  if (!range) return null
+
+  const encoded =
+    range.quoteChar === '"'
+      ? `"${newValue}"`
+      : range.quoteChar === "'"
+        ? `'${newValue}'`
+        : newValue
+  // Replace the whole value token (quotes included when present).
+  const valueTokenStart = range.quoted ? range.valueStart - 1 : range.valueStart
+  const valueTokenEnd = range.quoted ? range.valueEnd + 1 : range.valueEnd
+  return openTag.slice(0, valueTokenStart) + encoded + openTag.slice(valueTokenEnd)
 }
 
 export function updateAttribute(
@@ -896,10 +902,20 @@ export function updateAttribute(
 }
 
 function removeAttributeFromOpenTag(openTag: string, attrName: string): string | null {
-  const escaped = attrName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const pattern = new RegExp(`\\s\\b${escaped}\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s"'=<>\`]+)`, 'i')
-  if (!pattern.test(openTag)) return null
-  return openTag.replace(pattern, '')
+  const ranges = parseAttributeRanges(openTag, 0)
+  const range = ranges.find((entry) => entry.name === attrName)
+  if (!range) return null
+
+  const valueTokenStart = range.quoted ? range.valueStart - 1 : range.valueStart
+  const valueTokenEnd = range.quoted ? range.valueEnd + 1 : range.valueEnd
+  // Include the whitespace before the attribute name.
+  let start = range.nameStart
+  while (start > 0 && /[ \t\r\n]/.test(openTag[start - 1])) start -= 1
+  // Keep at least one space if we would glue the previous token to the next.
+  if (start === range.nameStart && start > 0) {
+    // no leading whitespace — unusual but avoid eating into the tag name
+  }
+  return openTag.slice(0, start) + openTag.slice(valueTokenEnd)
 }
 
 /**
@@ -1122,6 +1138,96 @@ export function deleteAttribute(
   const next = content.slice(0, context.openTagStart) + updated + content.slice(context.openTagEnd)
   const cursor = Math.min(context.openTagStart + updated.length, next.length)
   return { content: next, cursor }
+}
+
+const IGNORED_ATTRIBUTE_RE = /^ignore-(\d+)-(.+)$/
+
+/** `ignore-0-fill` → `{ id: 0, base: 'fill' }`; bare `ignore-foo` is not matched. */
+export function parseIgnoredAttributeName(name: string): { id: number; base: string } | null {
+  const match = IGNORED_ATTRIBUTE_RE.exec(name)
+  if (!match) return null
+  return { id: Number(match[1]), base: match[2] }
+}
+
+export function isIgnoredAttributeName(name: string): boolean {
+  return parseIgnoredAttributeName(name) !== null
+}
+
+export function ignoredAttributeName(id: number, base: string): string {
+  return `ignore-${id}-${base}`
+}
+
+/** Lowest unused non-negative id among `ignore-N-<base>` on the element. */
+export function nextIgnoreId(existing: Record<string, string>, base: string): number {
+  const used = new Set<number>()
+  for (const name of Object.keys(existing)) {
+    const parsed = parseIgnoredAttributeName(name)
+    if (parsed && parsed.base === base) used.add(parsed.id)
+  }
+  let id = 0
+  while (used.has(id)) id += 1
+  return id
+}
+
+function renameAttributeInOpenTag(openTag: string, from: string, to: string): string | null {
+  const ranges = parseAttributeRanges(openTag, 0)
+  const range = ranges.find((entry) => entry.name === from)
+  if (!range) return null
+  if (ranges.some((entry) => entry.name === to)) return null
+  return openTag.slice(0, range.nameStart) + to + openTag.slice(range.nameEnd)
+}
+
+export function renameAttribute(
+  content: string,
+  path: PathSegment[],
+  from: string,
+  to: string,
+): EditResult | null {
+  if (from === to) return null
+
+  const context = findElementByPath(content, path)
+  if (!context || context.commentedOut) return null
+  if (context.existingAttributes[from] === undefined) return null
+  if (context.existingAttributes[to] !== undefined) return null
+
+  const openTag = content.slice(context.openTagStart, context.openTagEnd)
+  const updated = renameAttributeInOpenTag(openTag, from, to)
+  if (!updated) return null
+
+  const next = content.slice(0, context.openTagStart) + updated + content.slice(context.openTagEnd)
+  const cursor =
+    attributeValueCursor(updated, to, context.openTagStart) ??
+    Math.min(context.openTagStart + updated.length, next.length)
+  return { content: next, cursor }
+}
+
+/**
+ * Toggle an attribute between live and `ignore-N-<name>`. Un-ignoring while the
+ * base name is already present parks the live value under a new ignore id first.
+ */
+export function toggleIgnoreAttribute(
+  content: string,
+  path: PathSegment[],
+  attrName: string,
+): EditResult | null {
+  const context = findElementByPath(content, path)
+  if (!context || context.commentedOut) return null
+  if (context.existingAttributes[attrName] === undefined) return null
+
+  const parsed = parseIgnoredAttributeName(attrName)
+  if (parsed) {
+    const { base } = parsed
+    if (context.existingAttributes[base] !== undefined) {
+      const parkName = ignoredAttributeName(nextIgnoreId(context.existingAttributes, base), base)
+      const parked = renameAttribute(content, path, base, parkName)
+      if (!parked) return null
+      return renameAttribute(parked.content, path, attrName, base)
+    }
+    return renameAttribute(content, path, attrName, base)
+  }
+
+  const ignored = ignoredAttributeName(nextIgnoreId(context.existingAttributes, attrName), attrName)
+  return renameAttribute(content, path, attrName, ignored)
 }
 
 /**
